@@ -17,16 +17,11 @@ pluginManager.withPlugin('java') {
     pluginManager.apply 'info.solidsoft.pitest'
 
     dependencies {
-        // compileOnly, so the published module metadata stays dependency-free. The annotations are
-        // erased at runtime and NullAway reads them from source. Supplied here rather than per
-        // module because it is this convention that turns NullAway on and therefore demands them.
         compileOnly 'org.jspecify:jspecify:1.0.0'
         compileOnly 'org.jetbrains:annotations:26.1.0'
     }
 
     tasks.withType(JavaCompile).configureEach {
-        // 17, not the toolchain's 25: a Gradle plugin runs inside other people's build daemons, and
-        // Gradle 9 supports running on Java 17.
         options.release = 17
         options.encoding = 'UTF-8'
         options.compilerArgs += ['-Werror', '-parameters', '-Xmaxwarns', '10000', '-Xmaxerrs', '10000']
@@ -44,17 +39,11 @@ pluginManager.withPlugin('java') {
         jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:+CrashOnOutOfMemoryError', '-XX:+EnableDynamicAgentLoading'
     }
 
-    // Spock and CodeNarc stay on the Groovy 4 line even though jspecify uses Groovy 5. A
-    // `java-gradle-plugin` project has `gradleApi()` on the test classpath, and that carries the
-    // Groovy the Gradle distribution embeds - Groovy 4 for Gradle 9. Adding Groovy 5 on top would
-    // put two Groovy runtimes on one classpath.
     testing {
         suites {
             withType(JvmTestSuite).configureEach {
                 useSpock '2.4-groovy-4.0'
                 dependencies {
-                    // Class mocking. The production classes are concrete rather than
-                    // interfaces-for-mocking's-sake, so Spy and Mock need a bytecode backend.
                     runtimeOnly 'net.bytebuddy:byte-buddy:1.17.8'
                     runtimeOnly 'org.objenesis:objenesis:3.4'
                 }
@@ -136,10 +125,6 @@ pluginManager.withPlugin('groovy') {
 
 pluginManager.withPlugin('info.solidsoft.pitest') {
     pitest {
-        // Only the calculation core. The Gradle-facing packages are wiring whose behaviour is
-        // observable only through a separate build process, so every mutation there survives the
-        // unit tests by construction - see design.md, "Java, and a hard split". Anything in `calc`
-        // is a pure function and has no excuse.
         targetClasses = ['io.github.joke.conventionalversion.calc.*']
         outputFormats = ['XML', 'HTML']
         pitestVersion = '1.25.8'
@@ -161,14 +146,8 @@ pluginManager.withPlugin('info.solidsoft.pitest') {
 }
 
 pluginManager.withPlugin('java-gradle-plugin') {
-    // Publishes to the Gradle Plugin Portal, which is itself a Maven-compatible repository served
-    // from plugins.gradle.org/m2 and already a default in every build's pluginManagement
-    // repositories. It also generates the sources and javadoc jars the portal expects.
     pluginManager.apply 'com.gradle.plugin-publish'
 
-    // A separate suite rather than a tag on `test`: functional tests spawn a Gradle process each, so
-    // they are slow enough that running them apart from the sub-second unit tests is worth the
-    // extra source set.
     testing {
         suites {
             functionalTest(JvmTestSuite) {
@@ -184,8 +163,6 @@ pluginManager.withPlugin('java-gradle-plugin') {
         }
     }
 
-    // Puts the plugin under test on the functional test classpath, which is what lets a generated
-    // build apply it by id without resolving it from a repository.
     gradlePlugin.testSourceSets.add sourceSets.functionalTest
 
     tasks.named('check') {
@@ -194,9 +171,6 @@ pluginManager.withPlugin('java-gradle-plugin') {
 }
 
 pluginManager.withPlugin('com.gradle.plugin-publish') {
-    // The portal treats every version as immutable, so a -SNAPSHOT there would be meaningless and is
-    // rejected. Failing here rather than at upload turns a late credentialed failure into an
-    // immediate local one, and documents why CI gates publishing on release-please cutting a release.
     tasks.named('publishPlugins') {
         def declaredVersion = providers.provider { project.version.toString() }
         doFirst {

@@ -7,14 +7,10 @@ repositories {
     mavenCentral()
 }
 
-// Every Gradle plugin version is declared here and nowhere else. settings.gradle deliberately has no
-// pluginManagement block: a version in both places is a version that can disagree with itself.
 dependencies {
     implementation 'com.diffplug.spotless:spotless-plugin-gradle:8.8.0'
     implementation 'net.ltgt.gradle:gradle-errorprone-plugin:5.1.0'
     implementation 'net.ltgt.gradle:gradle-nullaway-plugin:3.1.0'
     implementation 'info.solidsoft.gradle.pitest:gradle-pitest-plugin:1.19.0'
-    // 2.1.0 and later auto-apply org.gradle.plugin-compatibility, which is what puts the
-    // configuration cache badge on the portal listing.
     implementation 'com.gradle.publish:plugin-publish-plugin:2.1.1'
 }

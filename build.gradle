@@ -16,10 +16,6 @@ gradlePlugin {
             displayName = 'Conventional Version'
             description = project.description
             tags = ['versioning', 'semver', 'conventional-commits', 'release-please', 'snapshot']
-            // Surfaces a badge on the portal listing and lets Gradle name this plugin when a build
-            // enables a feature a plugin does not support. Declared rather than hoped for: the
-            // functional suite runs real builds with the configuration cache and with isolated
-            // projects enabled.
             compatibility {
                 features {
                     configurationCache = true

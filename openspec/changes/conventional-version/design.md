@@ -245,6 +245,11 @@ entire verification stack this project inherits. Java has no runtime dependency 
 The split is not cosmetic: it is what makes exhaustive testing of the interesting logic possible
 without a daemon, and it is why the mutation thresholds inherited from `jspecify` remain achievable.
 
+Spock and CodeNarc stay on the Groovy 4 line, where `jspecify` uses Groovy 5. A `java-gradle-plugin`
+project has `gradleApi()` on its test classpath, and that carries the Groovy the Gradle distribution
+embeds — Groovy 4 for Gradle 9. Adding Groovy 5 on top would put two Groovy runtimes on one
+classpath, so the version is forced by Gradle rather than chosen.
+
 ### Published to the Gradle Plugin Portal only
 
 The portal is itself a Maven-compatible repository, served from `https://plugins.gradle.org/m2/`,
