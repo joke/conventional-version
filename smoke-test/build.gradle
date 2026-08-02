@@ -1,0 +1,36 @@
+plugins {
+    id 'groovy'
+    id 'conventions'
+}
+
+description = 'Runs real Gradle builds against real git repositories to smoke test the published behaviour'
+
+configurations {
+    pluginUnderTest {
+        canBeConsumed = false
+        canBeResolved = true
+    }
+}
+
+dependencies {
+    pluginUnderTest project(':conventional-version')
+    testImplementation gradleTestKit()
+}
+
+def pluginClasspathFile = layout.buildDirectory.file('plugin-under-test-classpath.txt')
+
+def writePluginClasspath = tasks.register('writePluginClasspath') {
+    def elements = configurations.pluginUnderTest.elements
+    def output = pluginClasspathFile
+    inputs.files(configurations.pluginUnderTest)
+    outputs.file(output)
+    doLast {
+        output.get().asFile.text = elements.get()*.asFile*.absolutePath.join('\n')
+    }
+}
+
+tasks.named('test') {
+    inputs.file(pluginClasspathFile).withPropertyName('pluginUnderTestClasspath')
+    dependsOn writePluginClasspath
+    systemProperty 'plugin.classpath.file', pluginClasspathFile.get().asFile.absolutePath
+}

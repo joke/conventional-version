@@ -14,11 +14,17 @@ pluginManager.withPlugin('java') {
     pluginManager.apply 'com.diffplug.spotless'
     pluginManager.apply 'net.ltgt.errorprone'
     pluginManager.apply 'pmd'
-    pluginManager.apply 'info.solidsoft.pitest'
 
     dependencies {
         compileOnly 'org.jspecify:jspecify:1.0.0'
         compileOnly 'org.jetbrains:annotations:26.1.0'
+
+        testImplementation platform('org.spockframework:spock-bom:2.4-groovy-4.0')
+        testImplementation 'org.spockframework:spock-core'
+
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+        testRuntimeOnly 'net.bytebuddy:byte-buddy:1.17.8'
+        testRuntimeOnly 'org.objenesis:objenesis:3.4'
     }
 
     tasks.withType(JavaCompile).configureEach {
@@ -34,21 +40,18 @@ pluginManager.withPlugin('java') {
     }
 
     tasks.withType(Test).configureEach {
+        useJUnitPlatform()
         maxParallelForks = Runtime.runtime.availableProcessors()
         maxHeapSize = '2g'
         jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:+CrashOnOutOfMemoryError', '-XX:+EnableDynamicAgentLoading'
     }
+}
 
-    testing {
-        suites {
-            withType(JvmTestSuite).configureEach {
-                useSpock '2.4-groovy-4.0'
-                dependencies {
-                    runtimeOnly 'net.bytebuddy:byte-buddy:1.17.8'
-                    runtimeOnly 'org.objenesis:objenesis:3.4'
-                }
-            }
-        }
+// Mutation testing needs production classes to mutate. A module that is only tests - the smoke test -
+// would fail `failWhenNoMutations` before doing anything useful.
+pluginManager.withPlugin('java') {
+    if (file('src/main/java').directory) {
+        pluginManager.apply 'info.solidsoft.pitest'
     }
 }
 
@@ -147,27 +150,6 @@ pluginManager.withPlugin('info.solidsoft.pitest') {
 
 pluginManager.withPlugin('java-gradle-plugin') {
     pluginManager.apply 'com.gradle.plugin-publish'
-
-    testing {
-        suites {
-            functionalTest(JvmTestSuite) {
-                dependencies {
-                    implementation gradleTestKit()
-                }
-                targets.configureEach {
-                    testTask.configure {
-                        shouldRunAfter tasks.named('test')
-                    }
-                }
-            }
-        }
-    }
-
-    gradlePlugin.testSourceSets.add sourceSets.functionalTest
-
-    tasks.named('check') {
-        dependsOn testing.suites.functionalTest
-    }
 }
 
 pluginManager.withPlugin('com.gradle.plugin-publish') {

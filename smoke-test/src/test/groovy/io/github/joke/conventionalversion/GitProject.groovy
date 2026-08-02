@@ -14,9 +14,19 @@ class GitProject {
     final File dir
     private final List<File> pluginClasspath
 
-    GitProject(File dir, List<File> pluginClasspath) {
+    GitProject(File dir, List<File> pluginClasspath = pluginClasspath()) {
         this.dir = dir
         this.pluginClasspath = pluginClasspath
+    }
+
+    /**
+     * The plugin under test, written out by the build rather than obtained from TestKit's injection -
+     * that targets project plugins, and this is a settings plugin.
+     */
+    static List<File> pluginClasspath() {
+        def path = System.getProperty('plugin.classpath.file')
+        assert path: 'plugin.classpath.file system property is not set; the test task must supply it'
+        new File(path).readLines().findAll { it }.collect { new File(it) }
     }
 
     void init() {

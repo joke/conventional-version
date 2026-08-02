@@ -1,10 +1,9 @@
 package io.github.joke.conventionalversion
 
-import org.gradle.testkit.runner.GradleRunner
 import spock.lang.Specification
 import spock.lang.TempDir
 
-class ConventionalVersionPluginFunctionalSpec extends Specification {
+class ConventionalVersionSmokeSpec extends Specification {
 
     @TempDir
     File projectDir
@@ -16,7 +15,7 @@ class ConventionalVersionPluginFunctionalSpec extends Specification {
     GitProject project
 
     def setup() {
-        project = new GitProject(projectDir, GradleRunner.create().withPluginClasspath().pluginClasspath)
+        project = new GitProject(projectDir)
         project.init()
         project.settings()
         project.buildFile()
@@ -162,7 +161,7 @@ class ConventionalVersionPluginFunctionalSpec extends Specification {
 
     def 'fails with an actionable message outside a git repository'() {
         def bare = new File(projectDir, 'nested')
-        def outside = new GitProject(bare, GradleRunner.create().withPluginClasspath().pluginClasspath)
+        def outside = new GitProject(bare)
         outside.file 'placeholder', ''
         outside.settings()
         outside.buildFile()
@@ -182,7 +181,7 @@ class ConventionalVersionPluginFunctionalSpec extends Specification {
         project.tag 'v1.3.0'
         project.commit 'feat: add codec'
 
-        def shallow = new GitProject(cloneDir, GradleRunner.create().withPluginClasspath().pluginClasspath)
+        def shallow = new GitProject(cloneDir)
         shallow.git 'clone', '--depth', '1', "file://${projectDir.absolutePath}", '.'
         shallow.settings()
         shallow.buildFile()
