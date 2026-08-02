@@ -64,7 +64,7 @@ The build SHALL enforce formatting, static analysis and null-safety on every pro
 ### Requirement: Test strategy
 
 The version calculation core SHALL be testable without Gradle and SHALL be verified by unit tests.
-The Gradle-facing surface SHALL be verified by functional tests that execute real builds against real
+The Gradle-facing surface SHALL be verified by smoke tests that execute real builds against real
 temporary git repositories.
 
 #### Scenario: Core unit tests need no Gradle runtime
@@ -72,22 +72,28 @@ temporary git repositories.
 - **WHEN** the unit tests for the calculation core are run
 - **THEN** they execute without starting a Gradle build
 
-#### Scenario: Functional tests exercise a real build
+#### Scenario: Smoke tests exercise a real build
 
-- **WHEN** the functional tests are run
+- **WHEN** the smoke tests are run
 - **THEN** each executes a Gradle build against a temporary git repository whose history the test
   created
 
+#### Scenario: The plugin under test is supplied by the build
+
+- **WHEN** a smoke test applies the plugin in a generated settings file
+- **THEN** it resolves the plugin under test from the current sources, with no published artifact
+  and no repository involved
+
 #### Scenario: Configuration cache and isolated projects are asserted
 
-- **WHEN** the functional tests are run
+- **WHEN** the smoke tests are run
 - **THEN** they assert configuration cache reuse and invalidation, and a successful build with
   isolated projects enabled
 
-#### Scenario: Both suites run under check
+#### Scenario: Both kinds of test run under check
 
 - **WHEN** `check` is run
-- **THEN** both the unit tests and the functional tests execute
+- **THEN** both the unit tests and the smoke tests execute
 
 ### Requirement: Mutation coverage of the calculation core
 
@@ -104,6 +110,11 @@ from mutation testing, since its behaviour is only observable through a separate
 
 - **WHEN** mutation testing runs
 - **THEN** the settings plugin, its extension and the git access layer are not mutated
+
+#### Scenario: Modules without production classes are not mutated
+
+- **WHEN** a module contains only tests
+- **THEN** mutation testing does not run for it, and its absence does not fail the build
 
 ### Requirement: Publication
 

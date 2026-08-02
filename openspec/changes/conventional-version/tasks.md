@@ -26,8 +26,8 @@
       `checkContracts`, `acknowledgeRestrictiveAnnotations`, `RequireExplicitNullMarking` as error)
 - [x] 3.4 Apply PMD against `.pmd.xml` and CodeNarc against `.codenarc.groovy`
 - [x] 3.5 Add `package-info.java` with `@NullMarked` for every production package
-- [x] 3.6 Register a `functionalTest` source set and task wired to `check`, with the
-      `gradleTestKitPlugin` classpath available to it
+- [x] 3.6 Put the smoke tests in their own `:smoke-test` module with an ordinary test source set,
+      and have the build supply the plugin under test's classpath to them
 - [x] 3.7 Apply PIT with `jspecify`'s 100% mutation, coverage and test-strength thresholds, excluding
       the Gradle-facing package (per `design.md` — "Java, and a hard split")
 - [x] 3.8 Verify `./gradlew check` succeeds on the empty project with zero violations

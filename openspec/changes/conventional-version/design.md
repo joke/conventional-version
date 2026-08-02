@@ -239,16 +239,64 @@ entire verification stack this project inherits. Java has no runtime dependency 
 ```
   calculation core          ← no Gradle types. Spock where:-tables. PIT at 100%.
   ───────────────────
-  Gradle surface            ← ValueSource, plugin, extension. TestKit only. PIT excluded.
+  Gradle surface            ← ValueSource, plugin, extension. Smoke tests only. PIT excluded.
 ```
 
 The split is not cosmetic: it is what makes exhaustive testing of the interesting logic possible
 without a daemon, and it is why the mutation thresholds inherited from `jspecify` remain achievable.
 
-Spock and CodeNarc stay on the Groovy 4 line, where `jspecify` uses Groovy 5. A `java-gradle-plugin`
-project has `gradleApi()` on its test classpath, and that carries the Groovy the Gradle distribution
-embeds — Groovy 4 for Gradle 9. Adding Groovy 5 on top would put two Groovy runtimes on one
-classpath, so the version is forced by Gradle rather than chosen.
+### The build is split into modules
+
+```
+  :               root, no build script
+  :conventional-version   the plugin. src/main/java, src/test/groovy
+  :smoke-test             real Gradle builds against real git repositories
+```
+
+The plugin's directory is `plugin/`, but `settings.gradle` renames the project to
+`conventional-version`. The published artifact id follows the project name, so leaving it as `plugin`
+would have moved the coordinate from `io.github.joke:conventional-version` — already published as
+`1.0.0` — to `io.github.joke:plugin`. Renaming the project keeps the implementation artifact and the
+marker's dependency on it consistent by construction, rather than by patching publication ids
+afterwards.
+
+Smoke tests live in their own module rather than an extra source set in the plugin module. That drops
+the `JvmTestSuite` configuration entirely, and it drops TestKit's `withPluginClasspath()`, which
+injects the plugin under test for *project* plugins and never worked for a settings plugin — the
+tests always had to write their own `buildscript` block. The build now writes the plugin under test's
+classpath to a file and the tests read it, which is the same mechanism made explicit.
+
+Mutation testing is applied only to modules that have production classes. A module that is nothing
+but tests would otherwise fail `failWhenNoMutations` before doing any work.
+
+### Groovy 4 is imposed by Gradle, not chosen
+
+`jspecify` uses Groovy 5; this project cannot. A `java-gradle-plugin` module has `gradleApi()` on its
+test classpath and a module using `GradleRunner` has `gradleTestKit()`, and both carry the Groovy the
+Gradle distribution embeds — 4.0.32 for Gradle 9.6.1. Neither is optional here: the unit tests mock
+`Settings`, `Gradle` and `Property`, and the smoke tests drive real builds. Attempting Groovy 5 fails
+at compile time rather than subtly:
+
+```
+Spock 2.4.0-groovy-5.0 is not compatible with Groovy 4.0.32
+```
+
+The only way to run Groovy 5 anywhere in this build would be to extract the calculation core into a
+module that has no Gradle dependency at all, and accept two Spock versions in one build. Not done;
+recorded so the constraint is not rediscovered.
+
+### Isolated projects is off for this build
+
+`info.solidsoft.pitest` reaches into the root project's buildscript from every project it is applied
+to, which isolated projects forbids and the plugin offers no way to disable:
+
+```
+Project ':conventional-version' cannot access 'Project.buildscript' functionality on another project ':'
+```
+
+This was genuinely harmless while the root was the only project, and became real on splitting into
+modules. What this plugin promises is that a *consuming* build works under isolated projects, and the
+smoke tests assert exactly that against generated multi-project builds that do not apply pitest.
 
 ### Published to the Gradle Plugin Portal only
 
