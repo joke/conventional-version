@@ -40,6 +40,11 @@ jobs:
     # --no-configuration-cache because com.gradle.plugin-publish's PublishTask holds a Project, a
     # SourceSet and a Publication, none of which the configuration cache can serialise. Upstream
     # limitation, scoped to this one invocation; `check` runs with the cache enabled as normal.
+    # These environment variable names are fixed by com.gradle.plugin-publish. An ORG_GRADLE_PROJECT_
+    # prefix would not work here however it is spelled - that prefix sets a *project property* of the
+    # same name, and the properties this plugin reads are `gradle.publish.key` and
+    # `gradle.publish.secret`, which no environment variable name can express because of the dots.
+    # Plain environment variables are the documented CI route.
     - run: ./gradlew publishPlugins --no-configuration-cache
       env:
         GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
