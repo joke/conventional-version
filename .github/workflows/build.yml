@@ -1,0 +1,33 @@
+name: build
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    # release-please PRs only ever touch CHANGELOG.md - a full check is superfluous there.
+    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        # The version is derived from tags and the changelog, and `check` configures the publication,
+        # so it resolves the version. A shallow clone has no tags and the build fails by design
+        # rather than falling back to a wrong coordinate.
+        fetch-depth: 0
+    - uses: jdx/mise-action@v4
+    - uses: gradle/actions/setup-gradle@v6
+    - run: ./gradlew check
+    - name: Test Report
+      uses: dorny/test-reporter@v3
+      if: ${{ !cancelled() }}
+      with:
+        name: tests
+        path: '**/test-results/*/TEST-*.xml'
+        reporter: java-junit
