@@ -1,29 +1,10 @@
 plugins {
     id 'java-gradle-plugin'
     id 'groovy'
-    id 'pmd'
-    id 'codenarc'
-    id 'com.diffplug.spotless' version '8.8.0'
-    id 'net.ltgt.errorprone' version '5.1.0'
-    id 'net.ltgt.nullaway' version '3.1.0'
-    id 'info.solidsoft.pitest' version '1.19.0'
-    // Publishes to the Gradle Plugin Portal, which is itself a Maven-compatible repository served
-    // from plugins.gradle.org/m2 and already a default in every build's pluginManagement
-    // repositories. It also generates the sources and javadoc jars the portal expects.
-    id 'com.gradle.plugin-publish' version '1.3.1'
+    id 'conventions'
 }
 
 description = 'Calculates Gradle project versions from conventional commits, aligned with release-please'
-
-repositories {
-    mavenCentral()
-}
-
-java {
-    toolchain {
-        languageVersion = JavaLanguageVersion.of(25)
-    }
-}
 
 gradlePlugin {
     website = 'https://github.com/joke/conventional-version'
@@ -35,162 +16,15 @@ gradlePlugin {
             displayName = 'Conventional Version'
             description = project.description
             tags = ['versioning', 'semver', 'conventional-commits', 'release-please', 'snapshot']
-        }
-    }
-}
-
-// The portal treats every version as immutable, so a -SNAPSHOT there would be meaningless and is
-// rejected. Failing here rather than at upload turns a late credentialed failure into an immediate
-// local one, and documents why CI gates publishing on release-please having cut a release.
-tasks.named('publishPlugins') {
-    doFirst {
-        if (project.version.toString().endsWith('-SNAPSHOT')) {
-            throw new GradleException(
-                    "Refusing to publish $project.version: the Gradle Plugin Portal rejects SNAPSHOT versions. " +
-                            'Publish from a release commit, where the version resolves to a bare release version.')
-        }
-    }
-}
-
-// Spock and CodeNarc stay on the Groovy 4 line even though jspecify uses Groovy 5. A
-// `java-gradle-plugin` project has `gradleApi()` on the test classpath, and that carries the Groovy
-// the Gradle distribution embeds - Groovy 4 for Gradle 9. Adding Groovy 5 on top would put two
-// Groovy runtimes on one classpath.
-dependencies {
-    // compileOnly, so the published module metadata stays dependency-free. The annotations are
-    // erased at runtime and NullAway reads them from source.
-    compileOnly 'org.jspecify:jspecify:1.0.0'
-    compileOnly 'org.jetbrains:annotations:26.1.0'
-
-    codenarc 'org.codenarc:CodeNarc:3.7.0-groovy-4.0'
-
-    errorprone 'com.google.errorprone:error_prone_core:2.49.0'
-    errorprone 'com.uber.nullaway:nullaway:0.13.4'
-}
-
-testing {
-    suites {
-        withType(JvmTestSuite).configureEach {
-            useSpock '2.4-groovy-4.0'
-            dependencies {
-                // Class mocking. The core is deliberately made of concrete classes rather than
-                // interfaces-for-mocking's-sake, so Spy and Mock need a bytecode backend.
-                runtimeOnly 'net.bytebuddy:byte-buddy:1.17.8'
-                runtimeOnly 'org.objenesis:objenesis:3.4'
-            }
-        }
-
-        // A separate suite rather than a tag on `test`: functional tests spawn a Gradle process each,
-        // so they are slow enough that running them separately from the sub-second core tests is
-        // worth the extra source set.
-        functionalTest(JvmTestSuite) {
-            dependencies {
-                implementation gradleTestKit()
-            }
-            targets.configureEach {
-                testTask.configure {
-                    shouldRunAfter tasks.named('test')
+            // Surfaces a badge on the portal listing and lets Gradle name this plugin when a build
+            // enables a feature a plugin does not support. Declared rather than hoped for: the
+            // functional suite runs real builds with the configuration cache and with isolated
+            // projects enabled.
+            compatibility {
+                features {
+                    configurationCache = true
                 }
             }
         }
     }
-}
-
-// Puts the plugin under test on the functional test classpath, which is what lets a generated build
-// apply it by id without resolving it from a repository.
-gradlePlugin.testSourceSets.add sourceSets.functionalTest
-
-tasks.named('check') {
-    dependsOn testing.suites.functionalTest
-}
-
-tasks.withType(JavaCompile).configureEach {
-    // 17, not the toolchain's 25: this artifact runs inside other people's build daemons, and Gradle
-    // 9 supports running on Java 17.
-    options.release = 17
-    options.encoding = 'UTF-8'
-    options.compilerArgs += ['-Werror', '-parameters', '-Xmaxwarns', '10000', '-Xmaxerrs', '10000']
-    options.fork = true
-    options.forkOptions.jvmArgs += ['--sun-misc-unsafe-memory-access=allow']
-    options.errorprone {
-        disableWarningsInGeneratedCode = true
-        error 'RequireExplicitNullMarking'
-        nullaway {
-            error()
-            onlyNullMarked = true
-            treatGeneratedAsUnannotated = true
-            jspecifyMode = true
-            suggestSuppressions = true
-            checkContracts = true
-            acknowledgeRestrictiveAnnotations = true
-        }
-    }
-}
-
-tasks.withType(Javadoc).configureEach {
-    options.encoding = 'UTF-8'
-}
-
-spotless {
-    java {
-        forbidWildcardImports()
-        removeUnusedImports()
-        palantirJavaFormat('2.87.0')
-    }
-}
-
-pmd {
-    consoleOutput = false
-    toolVersion = '7.26.0'
-    rulesMinimumPriority = 5
-    ruleSets = ["$rootDir/.pmd.xml"]
-}
-
-codenarc {
-    configFile = file("$rootDir/.codenarc.groovy")
-    maxPriority1Violations = 0
-    maxPriority2Violations = 0
-    maxPriority3Violations = 0
-}
-
-tasks.withType(CodeNarc).configureEach {
-    reports {
-        xml.required = false
-        html.required = true
-        text.required = true
-    }
-}
-
-tasks.withType(Test).configureEach {
-    maxParallelForks = Runtime.runtime.availableProcessors()
-    maxHeapSize = '2g'
-    jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:+CrashOnOutOfMemoryError', '-XX:+EnableDynamicAgentLoading'
-}
-
-pitest {
-    // Only the calculation core. The Gradle-facing packages are wiring whose behaviour is observable
-    // only through a separate build process, so every mutation there survives the unit tests by
-    // construction - see design.md, "Java, and a hard split". Anything in `calc` is a pure function
-    // and has no excuse.
-    targetClasses = ['io.github.joke.conventionalversion.calc.*']
-    outputFormats = ['XML', 'HTML']
-    pitestVersion = '1.25.8'
-    junit5PluginVersion = '1.2.3'
-    mutators = ['ALL']
-    enableDefaultIncrementalAnalysis = true
-    timestampedReports = false
-    threads = Runtime.runtime.availableProcessors()
-    jvmArgs = ['-XX:+EnableDynamicAgentLoading', '-Dspock.parallel.disabled=true']
-    failWhenNoMutations = true
-    mutationThreshold = 100
-    coverageThreshold = 100
-    testStrengthThreshold = 100
-}
-
-dependencies {
-    pitest 'org.pitest:pitest-history-plugin:0.0.1'
-}
-
-tasks.named('check') {
-    dependsOn 'pitest'
 }

@@ -136,6 +136,12 @@ immutable.
 - **WHEN** the calculated version ends in `-SNAPSHOT`
 - **THEN** no publication to the portal is attempted
 
+#### Scenario: Configuration cache compatibility is declared
+
+- **WHEN** the publication is inspected
+- **THEN** it declares the plugin compatible with the configuration cache, so the portal shows the
+  badge and Gradle can name the plugin when a build enables a feature a plugin does not support
+
 ### Requirement: Self-versioning bootstrap
 
 The project SHALL end up versioned by its own plugin. Until it can be, the version SHALL be set

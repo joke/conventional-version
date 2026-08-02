@@ -37,9 +37,6 @@ jobs:
         fetch-depth: 0
     - uses: jdx/mise-action@v4
     - uses: gradle/actions/setup-gradle@v6
-    # --no-configuration-cache because com.gradle.plugin-publish's PublishTask holds a Project, a
-    # SourceSet and a Publication, none of which the configuration cache can serialise. Upstream
-    # limitation, scoped to this one invocation; `check` runs with the cache enabled as normal.
     # These environment variable names are fixed by com.gradle.plugin-publish. An ORG_GRADLE_PROJECT_
     # prefix would not work here however it is spelled - that prefix sets a *project property* of the
     # same name, and the properties this plugin reads are `gradle.publish.key` and

@@ -1,0 +1,211 @@
+group = 'io.github.joke'
+
+repositories {
+    mavenCentral()
+}
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(25)
+    }
+}
+
+pluginManager.withPlugin('java') {
+    pluginManager.apply 'com.diffplug.spotless'
+    pluginManager.apply 'net.ltgt.errorprone'
+    pluginManager.apply 'pmd'
+    pluginManager.apply 'info.solidsoft.pitest'
+
+    dependencies {
+        // compileOnly, so the published module metadata stays dependency-free. The annotations are
+        // erased at runtime and NullAway reads them from source. Supplied here rather than per
+        // module because it is this convention that turns NullAway on and therefore demands them.
+        compileOnly 'org.jspecify:jspecify:1.0.0'
+        compileOnly 'org.jetbrains:annotations:26.1.0'
+    }
+
+    tasks.withType(JavaCompile).configureEach {
+        // 17, not the toolchain's 25: a Gradle plugin runs inside other people's build daemons, and
+        // Gradle 9 supports running on Java 17.
+        options.release = 17
+        options.encoding = 'UTF-8'
+        options.compilerArgs += ['-Werror', '-parameters', '-Xmaxwarns', '10000', '-Xmaxerrs', '10000']
+        options.fork = true
+        options.forkOptions.jvmArgs += ['--sun-misc-unsafe-memory-access=allow']
+    }
+
+    tasks.withType(Javadoc).configureEach {
+        options.encoding = 'UTF-8'
+    }
+
+    tasks.withType(Test).configureEach {
+        maxParallelForks = Runtime.runtime.availableProcessors()
+        maxHeapSize = '2g'
+        jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:+CrashOnOutOfMemoryError', '-XX:+EnableDynamicAgentLoading'
+    }
+
+    // Spock and CodeNarc stay on the Groovy 4 line even though jspecify uses Groovy 5. A
+    // `java-gradle-plugin` project has `gradleApi()` on the test classpath, and that carries the
+    // Groovy the Gradle distribution embeds - Groovy 4 for Gradle 9. Adding Groovy 5 on top would
+    // put two Groovy runtimes on one classpath.
+    testing {
+        suites {
+            withType(JvmTestSuite).configureEach {
+                useSpock '2.4-groovy-4.0'
+                dependencies {
+                    // Class mocking. The production classes are concrete rather than
+                    // interfaces-for-mocking's-sake, so Spy and Mock need a bytecode backend.
+                    runtimeOnly 'net.bytebuddy:byte-buddy:1.17.8'
+                    runtimeOnly 'org.objenesis:objenesis:3.4'
+                }
+            }
+        }
+    }
+}
+
+pluginManager.withPlugin('com.diffplug.spotless') {
+    spotless {
+        java {
+            forbidWildcardImports()
+            removeUnusedImports()
+            palantirJavaFormat('2.87.0')
+        }
+    }
+}
+
+pluginManager.withPlugin('net.ltgt.errorprone') {
+    pluginManager.apply 'net.ltgt.nullaway'
+    dependencies {
+        errorprone 'com.google.errorprone:error_prone_core:2.49.0'
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.errorprone {
+            disableWarningsInGeneratedCode = true
+        }
+    }
+}
+
+pluginManager.withPlugin('net.ltgt.nullaway') {
+    dependencies {
+        errorprone 'com.uber.nullaway:nullaway:0.13.4'
+    }
+    tasks.withType(JavaCompile).configureEach {
+        options.errorprone {
+            error 'RequireExplicitNullMarking'
+            nullaway {
+                error()
+                onlyNullMarked = true
+                treatGeneratedAsUnannotated = true
+                jspecifyMode = true
+                suggestSuppressions = true
+                checkContracts = true
+                acknowledgeRestrictiveAnnotations = true
+            }
+        }
+    }
+}
+
+pluginManager.withPlugin('pmd') {
+    pmd {
+        consoleOutput = false
+        toolVersion = '7.26.0'
+        rulesMinimumPriority = 5
+        ruleSets = ["$rootDir/.pmd.xml"]
+    }
+}
+
+pluginManager.withPlugin('groovy') {
+    pluginManager.apply 'codenarc'
+    codenarc {
+        configFile = file("$rootDir/.codenarc.groovy")
+        maxPriority1Violations = 0
+        maxPriority2Violations = 0
+        maxPriority3Violations = 0
+    }
+    dependencies {
+        codenarc 'org.codenarc:CodeNarc:3.7.0-groovy-4.0'
+    }
+    tasks.withType(CodeNarc).configureEach {
+        reports {
+            xml.required = false
+            html.required = true
+            text.required = true
+        }
+    }
+}
+
+pluginManager.withPlugin('info.solidsoft.pitest') {
+    pitest {
+        // Only the calculation core. The Gradle-facing packages are wiring whose behaviour is
+        // observable only through a separate build process, so every mutation there survives the
+        // unit tests by construction - see design.md, "Java, and a hard split". Anything in `calc`
+        // is a pure function and has no excuse.
+        targetClasses = ['io.github.joke.conventionalversion.calc.*']
+        outputFormats = ['XML', 'HTML']
+        pitestVersion = '1.25.8'
+        junit5PluginVersion = '1.2.3'
+        mutators = ['ALL']
+        enableDefaultIncrementalAnalysis = true
+        timestampedReports = false
+        threads = Runtime.runtime.availableProcessors()
+        jvmArgs = ['-XX:+EnableDynamicAgentLoading', '-Dspock.parallel.disabled=true']
+        failWhenNoMutations = true
+        mutationThreshold = 100
+        coverageThreshold = 100
+        testStrengthThreshold = 100
+    }
+    dependencies {
+        pitest 'org.pitest:pitest-history-plugin:0.0.1'
+    }
+    tasks.named('check') { dependsOn 'pitest' }
+}
+
+pluginManager.withPlugin('java-gradle-plugin') {
+    // Publishes to the Gradle Plugin Portal, which is itself a Maven-compatible repository served
+    // from plugins.gradle.org/m2 and already a default in every build's pluginManagement
+    // repositories. It also generates the sources and javadoc jars the portal expects.
+    pluginManager.apply 'com.gradle.plugin-publish'
+
+    // A separate suite rather than a tag on `test`: functional tests spawn a Gradle process each, so
+    // they are slow enough that running them apart from the sub-second unit tests is worth the
+    // extra source set.
+    testing {
+        suites {
+            functionalTest(JvmTestSuite) {
+                dependencies {
+                    implementation gradleTestKit()
+                }
+                targets.configureEach {
+                    testTask.configure {
+                        shouldRunAfter tasks.named('test')
+                    }
+                }
+            }
+        }
+    }
+
+    // Puts the plugin under test on the functional test classpath, which is what lets a generated
+    // build apply it by id without resolving it from a repository.
+    gradlePlugin.testSourceSets.add sourceSets.functionalTest
+
+    tasks.named('check') {
+        dependsOn testing.suites.functionalTest
+    }
+}
+
+pluginManager.withPlugin('com.gradle.plugin-publish') {
+    // The portal treats every version as immutable, so a -SNAPSHOT there would be meaningless and is
+    // rejected. Failing here rather than at upload turns a late credentialed failure into an
+    // immediate local one, and documents why CI gates publishing on release-please cutting a release.
+    tasks.named('publishPlugins') {
+        def declaredVersion = providers.provider { project.version.toString() }
+        doFirst {
+            if (declaredVersion.get().endsWith('-SNAPSHOT')) {
+                throw new GradleException(
+                        "Refusing to publish ${declaredVersion.get()}: the Gradle Plugin Portal rejects SNAPSHOT " +
+                                'versions. Publish from a release commit, where the version resolves to a bare ' +
+                                'release version.')
+            }
+        }
+    }
+}
