@@ -3,6 +3,11 @@ name: release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing tag to publish, for example v1.0.0
+        required: true
 
 permissions:
   contents: write
@@ -10,6 +15,7 @@ permissions:
 
 jobs:
   release-please:
+    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -23,26 +29,24 @@ jobs:
       with:
         release-type: simple
 
-  # Only runs when release-please actually cut a release. The Gradle Plugin Portal treats every
-  # version as immutable and rejects -SNAPSHOT, so publishing is only ever correct from a release
-  # commit - which is also the only commit where the plugin resolves a bare version.
   publish:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created }}
+    if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
+    env:
+      TAG: ${{ github.event.inputs.tag || needs.release-please.outputs.tag_name }}
     steps:
     - uses: actions/checkout@v7
       with:
-        ref: ${{ needs.release-please.outputs.tag_name }}
+        ref: ${{ env.TAG }}
         fetch-depth: 0
     - uses: jdx/mise-action@v4
     - uses: gradle/actions/setup-gradle@v6
-    # These environment variable names are fixed by com.gradle.plugin-publish. An ORG_GRADLE_PROJECT_
-    # prefix would not work here however it is spelled - that prefix sets a *project property* of the
-    # same name, and the properties this plugin reads are `gradle.publish.key` and
-    # `gradle.publish.secret`, which no environment variable name can express because of the dots.
-    # Plain environment variables are the documented CI route.
-    - run: ./gradlew publishPlugins --no-configuration-cache
+    # -Pversion is a bootstrap crutch and must be removed once the plugin versions this project. Until
+    # then the version is set explicitly in gradle.properties, and release-please's `simple` strategy
+    # does not update it - it writes CHANGELOG.md and nothing else. Publishing from the tag without
+    # this would offer 1.0.0-SNAPSHOT, which the portal rejects.
+    - run: ./gradlew publishPlugins -Pversion="${TAG#v}"
       env:
         GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
         GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}

@@ -134,8 +134,10 @@
 
 - [x] 11.1 Set the project version explicitly to `1.0.0-SNAPSHOT` in `gradle.properties`
 - [ ] 11.2 Release `1.0.0` to the Gradle Plugin Portal (requires portal credentials - user action)
-- [ ] 11.3 Apply the released plugin in this project's own `settings.gradle` and remove the explicit
-      version from `gradle.properties`
+- [ ] 11.3 Apply the released plugin in this project's own `settings.gradle`, remove the explicit
+      version from `gradle.properties`, and remove the `-Pversion` bootstrap crutch from
+      `release.yml` - once the plugin calculates the version, overriding it would mask a
+      miscalculation rather than guard against one
 - [ ] 11.4 Verify the calculated version matches what release-please records for this repository
 - [x] 11.5 Document in `README.md` how to apply the plugin, the configuration options and their
       release-please counterparts, and how to consume it from source with `includeBuild` during
