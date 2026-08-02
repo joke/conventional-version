@@ -153,11 +153,18 @@ explicitly, and the transition SHALL be verifiable rather than assumed.
 - **THEN** the project's version is set explicitly to `1.0.0-SNAPSHOT`, since no published artifact
   exists for it to apply to itself
 
+#### Scenario: The first release is published under the version its tag names
+
+- **WHEN** a release is published while the version is still set explicitly
+- **THEN** the version published is the one the release tag names, not the explicit
+  `-SNAPSHOT` value, because the release tooling maintains only the changelog and leaves the
+  explicit version untouched
+
 #### Scenario: The project versions itself after the first release
 
 - **WHEN** the first release has been published and the project applies it in its own settings file
-- **THEN** the explicit version is removed and the project's version is calculated from its own
-  history
+- **THEN** the explicit version is removed, the version override used for the first publish is
+  removed, and the project's version is calculated from its own history
 
 #### Scenario: Recovery from a broken release
 

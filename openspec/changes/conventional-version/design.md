@@ -270,6 +270,27 @@ snapshots to a Central coordinate that never receives a release is incoherent fo
 it, and it reintroduces GPG signing and a second credential set for a pre-release channel nobody has
 asked for. If someone does, Central becomes the place for both and this decision is revisited.
 
+The **first** publication of a plugin id is gated on manual approval by Gradle. `publishPlugins`
+succeeds and the artifacts land under `plugins.gradle.org/m2`, but the plugin marker does not resolve
+and the listing page returns "Plugin not found" until the id is approved:
+
+> Your new plugin io.github.joke.conventional-version has been submitted for approval by Gradle
+> engineers. The request should be processed within the next few days.
+
+A successful publish is therefore not the same as a consumable plugin, and this gate applies once to
+the id rather than to each version.
+
+### Compatibility is declared, not merely achieved
+
+The plugin declares `configurationCache = true` through `org.gradle.plugin-compatibility`, which
+`com.gradle.plugin-publish` 2.1.0 and later apply automatically. This puts a badge on the portal
+listing, feeds search ranking, and lets Gradle name this plugin when a build enables a feature a
+plugin does not support. Publishing without the declaration is already deprecated.
+
+`configurationCache` is the only feature the 1.0.0 metadata model defines - there is no
+isolated-projects flag to set - so the declaration is complete rather than partial, even though this
+plugin supports both.
+
 ### Bootstrap sequence
 
 ```mermaid
@@ -282,6 +303,23 @@ flowchart LR
 There is no intermediate snapshot step, because there is nowhere to publish one. That removes the
 deadlock the earlier sequence carried: with no snapshot to consume, a bad publish cannot break this
 project's own build.
+
+The first release needs one bridge that the rest do not. `release-please`'s `simple` strategy writes
+`CHANGELOG.md` and **nothing else** - it creates no `version.txt` and knows nothing of
+`gradle.properties` - so the tagged tree still carries the explicit `1.0.0-SNAPSHOT`, which the portal
+rejects and which this build refuses to offer. The publish therefore takes the version from the tag
+being published:
+
+```
+./gradlew publishPlugins -Pversion="${TAG#v}"
+```
+
+That is a bootstrap crutch with a defined end. Once the plugin versions this project, the same commit
+resolves to a bare `1.0.0` on its own, and `-Pversion` must be removed: an override that agrees with
+the calculation adds nothing, while one that disagrees would hide the disagreement.
+
+This also confirms, rather than merely assumes, the earlier decision not to derive the base version
+from `version.txt`. That file was never created.
 
 Development against other projects needs no publishing at all —
 `pluginManagement { includeBuild('../conventional-version') }` resolves the plugin from source, which
@@ -297,6 +335,10 @@ is how `jspecify` can adopt it before any release exists.
   moving target. Mitigated by a CI check comparing the calculated version against the version in
   release-please's pending release pull request, turning the assumption into a failing build rather
   than a wrong publish.
+- **The first release is published but not yet consumable** → The plugin id is queued for manual
+  approval by Gradle, so `1.0.0` cannot be applied by anyone, including this project, until that
+  clears. Nothing to do but wait; the artifacts are already uploaded and the approval is per id, not
+  per version. Self-application and every task that depends on it are blocked until then.
 - **This plugin cannot dogfood itself until 1.0.0 exists** → Accepted, and cheaper than the
   alternative: the snapshot channel that would have allowed it is also what made a bad publish able
   to break this project's own build. Until the first release the version is set explicitly, and the

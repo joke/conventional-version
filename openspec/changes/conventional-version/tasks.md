@@ -133,7 +133,9 @@
 ## 11. Bootstrap
 
 - [x] 11.1 Set the project version explicitly to `1.0.0-SNAPSHOT` in `gradle.properties`
-- [ ] 11.2 Release `1.0.0` to the Gradle Plugin Portal (requires portal credentials - user action)
+- [x] 11.2 Release `1.0.0` to the Gradle Plugin Portal - published; the plugin id is queued for
+      Gradle's one-time manual approval of a new id, so it is not resolvable yet and 11.3
+      onwards are blocked until that clears
 - [ ] 11.3 Apply the released plugin in this project's own `settings.gradle`, remove the explicit
       version from `gradle.properties`, and remove the `-Pversion` bootstrap crutch from
       `release.yml` - once the plugin calculates the version, overriding it would mask a
@@ -150,7 +152,8 @@
 - [x] 12.2 Run two consecutive builds with the configuration cache enabled and confirm the second
       reuses the entry
 - [x] 12.3 Run a build with isolated projects enabled and confirm no violations
-- [ ] 12.4 Create a throwaway local tag matching a changelog entry, confirm the version resolves to
-      the bare release version, then delete the tag
+- [ ] 12.4 Confirm the version resolves to the bare release version on the release commit - this
+      repository's own `v1.0.0` tag and `## 1.0.0` changelog entry are already the case to check,
+      once self-application makes the plugin the source of the version
 - [ ] 12.5 Sync the delta specs into `openspec/specs/` with `/opsx:sync`
 - [ ] 12.6 Commit with `/commit-commands:commit`
