@@ -17,6 +17,7 @@ import org.gradle.api.file.DirectoryProperty;
 import org.gradle.api.provider.Property;
 import org.gradle.api.provider.ValueSource;
 import org.gradle.api.provider.ValueSourceParameters;
+import org.jetbrains.annotations.VisibleForTesting;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -48,17 +49,24 @@ public abstract class VersionValueSource implements ValueSource<VersionResult, V
         return calculator().calculate(readState(directory), policy());
     }
 
-    private VersionCalculator calculator() {
+    @VisibleForTesting
+    protected VersionCalculator calculator() {
         return new VersionCalculator(new CommitMessageParser(), new BumpReducer());
     }
 
-    private RepositoryState readState(final File directory) {
+    @VisibleForTesting
+    protected RepositoryStateReader reader(final File directory) {
         final var repository = new GitRepository(new GitCommandRunner(directory));
-        final var reader = new RepositoryStateReader(repository, new ChangelogReader(), directory.toPath());
-        return reader.read(getParameters().getTagPrefix().get());
+        return new RepositoryStateReader(repository, new ChangelogReader(), directory.toPath());
     }
 
-    private VersionPolicy policy() {
+    @VisibleForTesting
+    protected RepositoryState readState(final File directory) {
+        return reader(directory).read(getParameters().getTagPrefix().get());
+    }
+
+    @VisibleForTesting
+    protected VersionPolicy policy() {
         final var configured = getParameters().getInitialVersion().get();
         final var initial = SemanticVersion.parse(configured)
                 .orElseThrow(() -> new ConventionalVersionException(

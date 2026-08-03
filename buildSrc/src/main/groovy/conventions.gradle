@@ -47,8 +47,8 @@ pluginManager.withPlugin('java') {
     }
 }
 
-// Mutation testing needs production classes to mutate. A module that is only tests - the smoke test -
-// would fail `failWhenNoMutations` before doing anything useful.
+// Mutation testing needs production classes to mutate. A module without any would fail
+// `failWhenNoMutations` before doing anything useful.
 pluginManager.withPlugin('java') {
     if (file('src/main/java').directory) {
         pluginManager.apply 'info.solidsoft.pitest'
@@ -128,7 +128,7 @@ pluginManager.withPlugin('groovy') {
 
 pluginManager.withPlugin('info.solidsoft.pitest') {
     pitest {
-        targetClasses = ['io.github.joke.conventionalversion.calc.*']
+        targetClasses = ['io.github.joke.conventionalversion.*']
         outputFormats = ['XML', 'HTML']
         pitestVersion = '1.25.8'
         junit5PluginVersion = '1.2.3'

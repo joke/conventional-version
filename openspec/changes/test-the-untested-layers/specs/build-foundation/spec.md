@@ -2,11 +2,13 @@
 
 ### Requirement: Test strategy
 
-Every production package SHALL be verified by unit tests that run without a Gradle build. Tests that
-execute a real Gradle build SHALL be reserved for behaviour that is only observable through a
-separate build process — configuration cache validity, isolated projects compatibility, and the
-interaction between version assignment and other plugins. A behaviour that can be asserted without a
-daemon SHALL NOT be asserted only by a test that starts one.
+Every production package SHALL be verified by unit tests that run without a Gradle build, and the
+build SHALL NOT execute a Gradle build under test. A behaviour that can be asserted without a daemon
+SHALL NOT be asserted by a test that starts one.
+
+The plugin SHALL additionally be applied to a real consuming build that resolves it from the current
+sources, so that the whole chain is exercised against a real repository rather than a generated
+fixture. That build SHALL NOT be part of the build it consumes.
 
 #### Scenario: Core unit tests need no Gradle runtime
 
@@ -29,42 +31,29 @@ daemon SHALL NOT be asserted only by a test that starts one.
 
 - **WHEN** the unit tests are run
 - **THEN** they cover the settings plugin's registration and deferral, the value source's parameter
-  handling and its failure on an unparseable configured version, and the per-project action's
-  effects, by invoking that action rather than by asserting only that it was registered
+  handling and its failure on an unparseable configured version, and the per-project action, by
+  instantiating that action and invoking it directly
 
-#### Scenario: Smoke tests exercise a real build
+#### Scenario: No test executes a Gradle build
 
-- **WHEN** the smoke tests are run
-- **THEN** each executes a Gradle build against a temporary git repository whose history the test
-  created
+- **WHEN** the test sources are inspected
+- **THEN** none of them starts a Gradle build
 
-#### Scenario: The plugin under test is supplied by the build
+#### Scenario: The plugin is applied to a real consuming build
 
-- **WHEN** a smoke test applies the plugin in a generated settings file
-- **THEN** it resolves the plugin under test from the current sources, with no published artifact
-  and no repository involved
+- **WHEN** the consuming build is run
+- **THEN** it resolves the plugin from the current sources, applies it, and every project in it
+  receives a version derived from this repository's own history, tags and changelog
 
-#### Scenario: Configuration cache and isolated projects are asserted
+#### Scenario: The consuming build runs under isolated projects
 
-- **WHEN** the smoke tests are run
-- **THEN** they assert configuration cache reuse and invalidation, and a successful build with
-  isolated projects enabled
+- **WHEN** the consuming build is run with isolated projects enabled
+- **THEN** it succeeds with no configuration cache problems
 
-#### Scenario: Smoke tests run against more than one Gradle version
+#### Scenario: The working tree is compared against the released plugin
 
-- **WHEN** the smoke tests are run
-- **THEN** each executes against both the oldest supported Gradle version and the current one
-
-#### Scenario: Smoke tests do not assert on Gradle's console prose
-
-- **WHEN** a smoke test asserts a configuration cache outcome
-- **THEN** it asserts an observable consequence of that outcome rather than matching a
-  human-readable message Gradle prints
-
-#### Scenario: Both kinds of test run under check
-
-- **WHEN** `check` is run
-- **THEN** both the unit tests and the smoke tests execute
+- **WHEN** the consuming build and the main build have both resolved a version
+- **THEN** the two versions are compared, and a disagreement fails the pipeline
 
 ### Requirement: Mutation coverage of production code
 
@@ -92,6 +81,29 @@ package SHALL carry a lower threshold than any other.
 
 - **WHEN** a module contains only tests
 - **THEN** mutation testing does not run for it, and its absence does not fail the build
+
+## ADDED Requirements
+
+### Requirement: The per-project action declares what it captures
+
+The action the plugin registers with Gradle SHALL be a named type whose captured state is its
+declared components, rather than a lambda whose captures are implicit. It SHALL reference only the
+project it is given, and SHALL be reconstructible by every supported Gradle version.
+
+#### Scenario: Captured state is declared
+
+- **WHEN** the action's type is inspected
+- **THEN** everything it carries into a project is a declared component of that type
+
+#### Scenario: The action reaches no further than its own project
+
+- **WHEN** the action is invoked against a project
+- **THEN** it touches only that project, and no other project or the build model
+
+#### Scenario: The action is reconstructible on the supported floor
+
+- **WHEN** the plugin runs on the oldest supported Gradle version with isolated projects enabled
+- **THEN** the action is deserialized successfully and every project is configured
 
 ## RENAMED Requirements
 

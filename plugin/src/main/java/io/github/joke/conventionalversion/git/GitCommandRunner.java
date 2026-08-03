@@ -5,6 +5,7 @@ import static java.nio.charset.StandardCharsets.UTF_8;
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -50,15 +51,26 @@ public class GitCommandRunner {
         }
     }
 
+    /** The full argument vector, git first. Separate from {@link #start} so it can be read back. */
     @VisibleForTesting
-    protected Process start(final List<String> arguments) {
-        final var command = new java.util.ArrayList<String>();
+    protected List<String> command(final List<String> arguments) {
+        final var command = new ArrayList<String>();
         command.add("git");
         command.addAll(arguments);
+        return command;
+    }
+
+    /**
+     * Spawns the command in the working directory.
+     *
+     * <p>Standard error is deliberately left unmerged, which is {@code ProcessBuilder}'s own default:
+     * the callers read standard output as data, and git's diagnostics must not contaminate it.
+     */
+    @VisibleForTesting
+    protected Process start(final List<String> arguments) {
         try {
-            return new ProcessBuilder(command)
+            return new ProcessBuilder(command(arguments))
                     .directory(workingDirectory)
-                    .redirectErrorStream(false)
                     .start();
         } catch (final IOException e) {
             throw new ConventionalVersionException(

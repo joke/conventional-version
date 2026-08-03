@@ -5,6 +5,5 @@ plugins {
 rootProject.name = 'conventional-version'
 
 include 'plugin'
-include 'smoke-test'
 
 project(':plugin').name = 'conventional-version'

@@ -43,15 +43,17 @@ calls `withGradleVersion()`.
   test strength thresholds already applied to `calc`. `conventions.gradle` widens `targetClasses`
   from `io.github.joke.conventionalversion.calc.*` to `io.github.joke.conventionalversion.*`, and the
   exclusion disappears rather than being replaced with a lower per-package bar.
-- **Reduce the smoke suite to what only a real Gradle can prove.** The four calculation re-runs, the
-  two error-message assertions and the two read-only assertions move down to unit tests; what remains
-  is configuration cache reuse and its two invalidation cases, isolated projects, publication
-  ordering, and one end-to-end version assignment.
-- **Stop asserting on Gradle's console prose.** `result.output.contains 'Configuration cache entry
-  reused.'` is a match against a human-readable message, not an API; the surviving cache tests assert
-  the observable consequence instead.
-- **Sample more than one Gradle.** The remaining smoke tests run via `withGradleVersion()` across the
-  supported floor and current, so the suite finally tests the variation it exists to test.
+- **Delete the smoke-test module entirely.** Once every assertion it carried is held at the level
+  that can hold it, what remained was our plugin combined with an arbitrarily chosen third party
+  (`maven-publish`) plus mechanisms Gradle guarantees. Combination testing has no principled stopping
+  point: nothing distinguished `maven-publish` from the thousands of other plugins we do not test.
+- **Make the registered action a named type.** `AssignVersion` replaces the lambda, so what the
+  action carries into a project is a declared component list rather than whatever happened to be in
+  scope — the one isolated-projects property no unit test could reach.
+- **Dogfood the plugin from source.** A separate `dogfood` build resolves the plugin via
+  `includeBuild` and applies it to projects in this repository, so the whole chain runs against real
+  history, real tags and the real changelog. It applies no pitest, which makes it the only build here
+  that can enable isolated projects. CI also compares its answer with the released plugin's.
 - **Correct the recorded rationale.** `git/package-info.java` and `design.md` lose the claim that
   these layers are only observable against a real build.
 
@@ -64,24 +66,28 @@ None. This change alters how existing behaviour is verified, not what the plugin
 ### Modified Capabilities
 
 - `build-foundation`: the **Test strategy** requirement currently assigns the entire Gradle-facing
-  surface to smoke tests; it is rewritten to divide the surface by what actually needs a Gradle
-  runtime, to require unit coverage of the git and plugin packages, and to require the smoke suite to
-  run against more than one Gradle version. The **Mutation coverage of the calculation core**
-  requirement currently mandates that the plugin, its extension and the git access layer are *not*
-  mutated; it is rewritten to cover all production code at the existing thresholds.
+  surface to smoke tests; it is rewritten to require unit coverage of every production package, to
+  forbid executing a Gradle build under test, and to require a real consuming build that resolves the
+  plugin from source. The **Mutation coverage of the calculation core** requirement currently mandates
+  that the plugin, its extension and the git access layer are *not* mutated; it is rewritten to cover
+  all production code at the existing thresholds. A new requirement fixes the per-project action's
+  shape, so what it captures is declared rather than implicit.
 
 ## Impact
 
 - **Tests added**: specs for `GitCommandRunner`, `GitRepository`, `RepositoryStateReader`,
   `VersionValueSource`, and an expanded `ConventionalVersionPluginSpec`.
-- **Tests removed**: eight of fifteen smoke tests, whose assertions move to the specs above.
+- **Tests removed**: the entire `smoke-test` module. Most of its assertions move to the specs above;
+  what is genuinely given up is recorded under Risk.
 - **Build**: `conventions.gradle:131` `targetClasses` widened; the PIT run grows to cover two more
   packages, and `check` gets slower in exchange for the two packages currently unmeasured.
 - **Production code**: no behavioural change. Some methods may need widened visibility or an
   extracted seam to be reachable from a spec; any such edit is mechanical and must not alter
   behaviour.
 - **Docs**: `git/package-info.java` and the testing sections of `design.md` restated.
-- **Risk**: the 100/100/100 bar on `GitCommandRunner` requires killing mutants in its
-  `InterruptedException` and `UncheckedIOException` branches, which are awkward to provoke. If a
-  mutant proves genuinely unkillable the finding is recorded and the code reshaped to remove the
-  branch, not the threshold lowered.
+- **Risk, accepted deliberately**: nothing verifies configuration cache or isolated projects against
+  a Gradle version other than the wrapper's. During this change the move to a named action broke
+  isolated projects on Gradle 9.0 — the declared floor — and only a multi-version build-executing
+  test caught it. That class of defect can now reach consumers. The dogfood build narrows it (it does
+  run under isolated projects, on the wrapper version) but does not close it, and `README.md` now
+  tells consumers to verify both flags themselves before trusting a release.

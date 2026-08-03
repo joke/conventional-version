@@ -1,0 +1,20 @@
+// Applied by each project to itself. Nothing here reaches across project boundaries, so this build
+// can run under isolated projects - which is the point: it is the only build in the repository that
+// can, since the main build applies pitest and pitest cannot.
+def info = project.extensions.conventionalVersion
+
+def projectName = project.name
+def version = project.version.toString()
+def sha = info.sha
+def bump = info.bumpType
+def releasable = info.releasable
+
+tasks.register('verifyDogfood') {
+    doLast {
+        assert version ==~ /\d+\.\d+\.\d+(-SNAPSHOT)?/: "not a version: $version"
+        assert sha.get() ==~ /[0-9a-f]{40}/: "not a sha: ${sha.get()}"
+        assert bump.get().toString() in ['MAJOR', 'MINOR', 'PATCH', 'NONE']
+        assert releasable.get() in [true, false]
+        println "dogfood[$projectName]=$version bump=${bump.get()} releasable=${releasable.get()} sha=${sha.get()}"
+    }
+}

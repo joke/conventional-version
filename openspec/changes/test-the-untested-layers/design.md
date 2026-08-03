@@ -14,8 +14,8 @@ See proposal.md — Why. The state that shapes the approach:
   argument validated rather than `_`, and the subject spied for self-calls. That style is what makes
   the "assert the exact git argument list" requirement natural rather than laborious.
 - No Gradle version floor is declared anywhere — not in `plugin/build.gradle`, not in
-  `gradlePlugin {}`, not in the specs. The smoke suite pins one version implicitly by using the
-  wrapper.
+  `gradlePlugin {}`, not in the specs. Any build-executing test pins one version implicitly by using
+  the wrapper.
 
 ## Goals / Non-Goals
 
@@ -23,8 +23,10 @@ See proposal.md — Why. The state that shapes the approach:
 
 - Put every assertion at the lowest level that can hold it.
 - Reach a single uniform mutation threshold with no per-package exception to justify.
-- Leave the smoke suite testing only what a daemon is required to observe, across more than one
-  Gradle.
+- Hold no assertion at a level higher than the one that can hold it, and none about our plugin
+  combined with a third-party plugin.
+- Exercise the plugin from source against a real repository, which self-hosting the released version
+  never did.
 
 **Non-Goals:**
 
@@ -33,21 +35,23 @@ See proposal.md — Why. The state that shapes the approach:
 - Testing git itself. The unit tests assert what this project *asks* git for and how it interprets
   what comes back — never that git's own output is correct.
 - A git version matrix. Once command construction and output interpretation are unit-tested, the
-  residual git-version risk is confined to output formats, which the surviving smoke tests exercise
-  incidentally. Adding a git matrix to CI is a larger change and is not proposed here.
+  residual risk is confined to git's output formats, and a matrix is a larger change than this.
+- Restructuring the plugin into its own build so it can version itself from source. The dogfood build
+  consumes the plugin from source; the plugin still self-hosts the released version, because a
+  settings plugin that versions itself cannot escape that bootstrap.
 
 ## Decisions
 
 ### Widen PIT last, not first
 
 The work order is: write unit tests → widen `targetClasses` → let PIT identify the gaps → close them
-→ reduce the smoke suite. Widening first turns every subsequent commit red and destroys the ability
-to tell a new gap from a pre-existing one. Reducing the smoke suite first removes the safety net
+→ only then touch the smoke suite. Widening first turns every subsequent commit red and destroys the
+ability to tell a new gap from a pre-existing one. Removing tests first takes away the safety net
 before its replacement is proven.
 
-The smoke reduction genuinely depends on the unit tests landing: each smoke test is deleted only in
-the same commit that adds the specs absorbing its assertions, so the deletion is reviewable as a
-move rather than as a loss.
+That ordering earned its keep: the last structural change was made while the smoke suite still
+existed, and the suite caught a defect in it. Had the deletion come first, the defect would have
+shipped.
 
 *Alternative considered:* widen PIT first to enumerate the work. Rejected — PIT's gap list is a
 worse specification than reading the classes, and it would hold `check` red across the whole change.
@@ -65,66 +69,101 @@ constructor taking collaborators would have to be reconciled with that, which is
 change to satisfy a test. The protected-seam pattern is already this codebase's idiom and costs
 nothing.
 
+### What the uniform threshold forced us to reshape
+
+Two mutants in `GitCommandRunner.start` had no observable behaviour behind them, and were removed
+rather than chased:
+
+- **`.redirectErrorStream(false)` deleted.** `false` is already `ProcessBuilder`'s default, so the
+  call restated it. Both the call and its constant were unkillable by construction — nothing can
+  distinguish stating a default from not stating it. The reason it mattered is now a comment on
+  `start` instead of a redundant call.
+- **`command(List)` extracted from `start`.** The argument vector was assembled inline, so
+  `add("git")` and `addAll(arguments)` could only be observed by spawning a process and inspecting
+  what ran. As its own method the vector is simply read back and asserted.
+
+That left one genuinely uncoverable point: `start`'s successful return. Spawning is what the method
+does, so covering it requires spawning. The spec stubs `command` to return `['true']` and spawns
+that instead — proving `start` launches whatever the vector says and hands back a usable process,
+without the test machine needing git.
+
+The `InterruptedException` and `UncheckedIOException` branches flagged as the main risk in
+proposal.md turned out to be straightforwardly killable against a mocked `Process`, and needed no
+reshaping at all.
+
 ### Test the per-project action by invoking it, not by observing its registration
 
-`ConventionalVersionPluginSpec` currently asserts `1 * lifecycle.beforeProject(_ as IsolatedAction)`.
-The replacement captures the argument, then invokes it against a mocked `Project` and asserts
-`setVersion` plus each of the four `VersionInfo` property assignments. This is the single largest
-coverage gain in the change: it is the plugin's entire payload, and three smoke tests currently exist
-only to observe it indirectly through printed output.
+`ConventionalVersionPluginSpec` asserted `1 * lifecycle.beforeProject(_ as IsolatedAction)` — that
+*something* was registered. The action is now a named record, so its spec instantiates it and invokes
+it directly, and the plugin spec asserts the exact value registered:
+`1 * lifecycle.beforeProject(new AssignVersion(result))`. Records give that comparison for free, and
+it retires the last permissive argument matcher in the suite. This is the single largest coverage
+gain in the change: the action is the plugin's entire payload.
 
-### Derive the Gradle floor from the APIs used, then confirm it empirically
+### The Gradle floor is 9.0, and the binding constraint is not the one we expected
 
-`gradle.getLifecycle().beforeProject(IsolatedAction)` is the newest API the plugin depends on. That
-sets the floor — the plugin cannot run below it regardless of what anyone declares. The matrix is
-therefore that version and the current wrapper version.
+The derivation said `gradle.getLifecycle().beforeProject(IsolatedAction)` sets the floor, which would
+have put it at 8.8. Measurement said otherwise. Gradle 8.8 and 8.14 both fail before reaching any of
+our code:
 
-The floor is *derived*, not verified, and the derivation could be wrong about the exact introducing
-version or about binary compatibility of code compiled against a newer `gradleApi()`. So the task
-list treats "run the suite against the candidate floor and record what actually passes" as the step
-that establishes the number, and declaring it in `gradlePlugin {}` follows from the result rather
-than preceding it.
+```
+BUG! exception in phase 'semantic analysis' in source unit '_BuildScript_'
+Unsupported class file major version 69
+```
 
-*Alternative considered:* matrix across every minor from the floor to current. Rejected — each entry
-downloads a distribution and runs six builds; the marginal information from intermediate minors does
-not pay for the CI time. Floor and current bracket the supported range, which is what the requirement
-asks for.
+Major version 69 is Java 25 — the toolchain this project builds on. The Groovy embedded in Gradle 8.x
+cannot parse Java 25 class files, so no 8.x line can run a build here at all. Gradle 9.0 passes
+every test; the boundary is the 8→9 line, not an API.
 
-### Assert cache outcomes by consequence, not by console text
+That makes the floor **9.0**, and it is a claim about what we can *demonstrate*, not about what might
+happen to work. Supporting a version the suite cannot execute would be exactly the kind of untested
+assertion this change exists to remove. `README.md` already said "Gradle 9 or later"; it now says 9.0.
 
-`result.output.contains 'Configuration cache entry reused.'` matches prose Gradle is free to reword.
-The replacement asserts the consequence: after a change that must invalidate, the printed version
-reflects the new state; after a no-op rebuild, it does not change. Where reuse itself must be
-asserted directly, the configuration cache report under `build/reports/configuration-cache` is a
-structured artifact and a better target than stdout.
+Worth recording for whoever revisits this: the constraint is a property of the *test toolchain*, not
+of the plugin. Should the project ever need to support 8.x, the plugin's own API use may well allow
+it, but proving that would mean running a build on an older JDK.
 
-This weakens one test slightly — a build that recomputed the version and got the same answer is
-indistinguishable from a reused entry. The tag-move test at `ConventionalVersionSmokeSpec:133`
-already handles this correctly by constructing a case where reuse and recomputation produce
-*different* printed versions, and that construction becomes the pattern for the others.
+The floor is recorded, but nothing enforces it any more: with the smoke suite gone, no build here
+runs on 9.0. It is the version a release was verified against by hand, and `README.md` says exactly
+that rather than implying continuous proof.
 
-### Which smoke tests move down, and to where
+### The smoke suite went, and why the reasoning ran out
 
-| Current smoke test | Absorbed by |
-|---|---|
-| `assigns a snapshot of the next minor` (1) | already in `VersionCalculatorSpec`; delete |
-| `assigns the bare recorded version` (2) | already in `VersionCalculatorSpec`; delete |
-| `starts a project that never released` (3) | already in `VersionCalculatorSpec`; delete |
-| `honours a configured initial version` (4) | new `VersionValueSourceSpec` — parameters reach the policy |
-| `exposes the head sha` (6) | new plugin spec — the action sets `sha`; `VersionCalculatorSpec` — the version excludes it |
-| `fails outside a git repository` (11) | new `GitRepositorySpec` — `verifyUsable`'s message |
-| `fails on a shallow clone` (12) | new `GitRepositorySpec` — `verifyUsable`'s message |
-| `leaves the repository untouched` (13) | new `GitRepositorySpec` — strict `0 * _` proves no write command is ever constructed |
-| `contributes no task` (15) | new plugin spec — the action registers no task |
+The reduction reached six tests, then kept going, because each surviving justification failed in turn:
 
-Surviving: the three configuration-cache tests, isolated projects, publication ordering, and the
-multi-project test (5), which is the one end-to-end proof that one calculation reaches every project.
+- `maven-publish` was one arbitrary third party. Our contract is with Gradle's API, not with other
+  plugins — every consumer gets the version for the same reason, that `project.version` is already
+  set. There is no principled stopping point between testing `maven-publish` and testing the rest of
+  the ecosystem, so the right number of plugin-combination tests is zero.
+- The cache tests rode on Gradle re-executing a value source and comparing the result. We declare no
+  inputs; invalidation is a consequence of `obtain()` returning something different. The unit tests
+  pin `providers.of(VersionValueSource)` and all five parameters, so the mechanism choice is checked
+  without a daemon.
+- The isolated-projects test rested on two properties: that the action touches only its own project,
+  already enforced by strict mocking, and that it captures only isolatable state — the one property
+  nothing could see. Making the action a named type turns that into a declared component list.
 
-Test 13 is worth a note. Replacing "the repository is byte-for-byte unchanged after a real build"
-with "no write command was constructed" is a genuine weakening — the former would catch a write from
-anywhere in the process, the latter only from `GitRepository`. Kept as a unit test rather than
-dropped, because strict `0 * _` on the runner is a stronger *routine* guarantee than an
-occasionally-run snapshot comparison, and no other code in the plugin touches the repository.
+What replaced them is not nothing. The `dogfood` build applies the plugin *from source* to projects in
+this repository, so the chain runs against real history rather than a fixture — something the smoke
+suite never did, since the main build has always self-hosted the *released* plugin. It also runs
+under isolated projects, which the main build cannot, because pitest violates them.
+
+### What this cost, recorded honestly
+
+Extracting `AssignVersion` broke isolated projects on Gradle 9.0, the declared floor. Gradle 9.0
+reconstructs a record by looking up its canonical constructor as a public member; the record was
+package-private, so deserialization failed with `NoSuchMethodException` and every project
+configuration died. Gradle 9.6.1 looks it up as declared and passed throughout.
+
+The reasoning that justified removing the tests had identified two isolated-projects requirements and
+verified both. The failure was in a third nobody named: **Gradle must be able to reconstruct the
+action**, which depends on JVM access modifiers and varies between Gradle versions. It was caught
+only because the change was sequenced before the deletion, by a suite running two Gradle versions.
+
+That is now the accepted risk rather than a solved problem. The dogfood build exercises isolated
+projects on the wrapper version only, so the same class of defect — correct by inspection, broken on
+one Gradle version — would reach consumers. `README.md` says so, and tells consumers to run both
+flags once against a new release.
 
 ## Risks / Trade-offs
 
@@ -140,9 +179,10 @@ occasionally-run snapshot comparison, and no other code in the plugin touches th
   analysis is already enabled (`conventions.gradle:139`); if the wall-clock cost becomes unacceptable
   the mitigation is moving `pitest` off `check` and onto CI only, which is a build-policy change to
   raise separately, not a threshold reduction.
-- **The Gradle matrix doubles smoke-suite wall time** → The suite currently runs in ~14.5s for
-  fifteen tests. Six tests across two versions is comparable, plus a one-off distribution download
-  per version that `setup-gradle` caches.
+- **No version matrix remains** → Nothing exercises any Gradle but the wrapper's. This is the
+  accepted risk above, not a mitigated one. Reintroducing coverage would mean a build-executing test,
+  which the Test strategy requirement now forbids; revisit that requirement first if the trade is
+  ever reconsidered.
 - **A widened-visibility method is a wider public surface** → `@VisibleForTesting protected` on a
   class in a plugin's implementation package is already the codebase's convention and these classes
   are not part of the documented API. No consumer-visible change.
@@ -155,7 +195,6 @@ methods.
 
 ## Open Questions
 
-- Whether the derived Gradle floor survives contact with a real build against that distribution.
-  Deferrable: the task list establishes the number empirically before it is declared anywhere, and a
-  different answer changes one constant in the matrix and one line in `gradlePlugin {}` — not the
-  specs, the approach, or the shape of the work.
+None outstanding. The one question this design opened — whether the derived Gradle floor survives
+contact with a real build — was answered during implementation: it did not, and the measured floor
+is 9.0 for the reason recorded above.

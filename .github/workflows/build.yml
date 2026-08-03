@@ -24,6 +24,22 @@ jobs:
     - uses: jdx/mise-action@v4
     - uses: gradle/actions/setup-gradle@v6
     - run: ./gradlew check
+    # The main build applies the *released* plugin, so `check` never exercises the working tree.
+    # This does: a real consuming build that resolves the plugin from source and applies it to a
+    # project in this repository, reading its actual history, tags and changelog. It is also the
+    # only build here that can enable isolated projects, because it applies no pitest.
+    - name: Dogfood the plugin from source
+      run: ./gradlew -p dogfood verifyDogfood -Dorg.gradle.unsafe.isolated-projects=true
+    - name: The plugin from source agrees with the released one
+      run: |
+        released="$(./gradlew -q properties | sed -n 's/^version: //p')"
+        from_source="$(./gradlew -q -p dogfood properties | sed -n 's/^version: //p')"
+        echo "released:    $released"
+        echo "from source: $from_source"
+        if [ "$released" != "$from_source" ]; then
+          echo "::error::The working tree calculates $from_source where the released plugin says $released"
+          exit 1
+        fi
     - name: Test Report
       uses: dorny/test-reporter@v3
       if: ${{ !cancelled() }}

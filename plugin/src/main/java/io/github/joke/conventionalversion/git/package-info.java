@@ -6,8 +6,9 @@
  * correctly. Requiring {@code git} on the {@code PATH} is a fair precondition for a plugin whose
  * whole purpose is reading git.
  *
- * <p>Excluded from mutation testing: this package is observable only against a real repository, so
- * it is covered by functional tests rather than by unit tests.
+ * <p>Unit tested and mutation tested like any other package. Running git is a collaboration, not an
+ * obstacle to testing: the command runner is spied to stub the spawn, and everything above it is
+ * asserted against a mocked runner - including the exact argument list each read sends to git.
  */
 @NullMarked
 package io.github.joke.conventionalversion.git;

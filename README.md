@@ -114,16 +114,23 @@ tasks.named('jar') {
   failed build is not. In GitHub Actions that means `fetch-depth: 0` on every job that resolves a
   version, including the one that runs `check`.
 
-Gradle 9 or later on Java 17 or later. The plugin has no runtime dependencies, so it adds nothing to
-your buildscript classpath.
+Gradle 9.0 or later on Java 17 or later. The plugin has no runtime dependencies, so it adds nothing
+to your buildscript classpath. The floor is 9.0 because that is where a released version was
+verified by hand; the build no longer executes Gradle builds under test, so treat it as the oldest
+version known to work rather than a continuously proven one.
 
 ## Configuration cache and isolated projects
 
-Both are supported and asserted by the test suite, not merely hoped for. Git is read through a
+Both are supported by construction. Git is read through a
 `ValueSource`, so the cache entry invalidates when a commit or tag changes it — rather than serving a
 stale version until something unrelated invalidates it. Versions are assigned through
 `gradle.lifecycle.beforeProject`, so git is read once per build no matter how many projects there
 are, and no project reaches into another.
+
+Neither property is verified by executing a build. If you depend on them, run your build once with
+`--configuration-cache` and `-Dorg.gradle.unsafe.isolated-projects=true` before trusting a new
+release — a plugin can satisfy both by inspection and still fail on a specific Gradle version, which
+has happened here once already.
 
 ## Development
 

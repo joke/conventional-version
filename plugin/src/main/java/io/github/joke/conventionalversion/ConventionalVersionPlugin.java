@@ -39,20 +39,12 @@ public class ConventionalVersionPlugin implements Plugin<Settings> {
     /**
      * Resolves the version once, then hands the plain result to every project.
      *
-     * <p>The value is resolved here rather than inside the per-project action so git is read once for
+     * <p>The value is resolved here rather than inside {@link AssignVersion} so git is read once for
      * the whole build, and so the isolated action captures nothing but an immutable record.
      */
     @VisibleForTesting
     protected void assignVersions(final Settings settings, final ConventionalVersionExtension extension) {
-        final var result = calculate(settings, extension);
-        settings.getGradle().getLifecycle().beforeProject(project -> {
-            project.setVersion(result.version());
-            final var info = project.getExtensions().create(EXTENSION_NAME, VersionInfo.class);
-            info.getVersion().set(result.version());
-            info.getBumpType().set(result.bump());
-            info.getReleasable().set(result.releasable());
-            info.getSha().set(result.sha());
-        });
+        settings.getGradle().getLifecycle().beforeProject(new AssignVersion(calculate(settings, extension)));
     }
 
     @VisibleForTesting

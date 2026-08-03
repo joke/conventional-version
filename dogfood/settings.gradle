@@ -1,0 +1,19 @@
+// A real consuming build, resolving the plugin from source rather than from the portal.
+//
+// This is what `check` cannot be: the main build applies the *released* plugin, so nothing there
+// exercises the working tree. Here the plugin is built from the current sources and applied to a
+// project sitting in this repository, so it reads this repository's real history, tags and
+// changelog - no generated fixture.
+//
+// It is a separate build, not a subproject, because a build cannot include itself.
+pluginManagement {
+    includeBuild '..'
+}
+
+plugins {
+    id 'io.github.joke.conventional-version'
+}
+
+rootProject.name = 'dogfood'
+
+include 'consumer'

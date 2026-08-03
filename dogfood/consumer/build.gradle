@@ -1,0 +1,2 @@
+// A second project, so the one-calculation-for-every-project promise is exercised for real.
+apply from: '../verify.gradle'
