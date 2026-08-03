@@ -29,6 +29,45 @@ jobs:
       with:
         release-type: simple
 
+  fidelity:
+    # The pending release pull request names the version release-please intends to cut, and predicting
+    # that number is this plugin's whole correctness claim. release-please can change its bump rules
+    # under us, so the claim is checked here on every push rather than discovered as a wrong
+    # coordinate on the portal. The pull request is found by release-please's own label rather than by
+    # branch name or action output, neither of which is stable across its versions.
+    needs: release-please
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        # The pushed commit, which is the history release-please just read. The pull request head is
+        # deliberately not used: it already carries the CHANGELOG entry for the version being cut,
+        # which the plugin would read back as the base version.
+        fetch-depth: 0
+    - uses: jdx/mise-action@v4
+    - uses: gradle/actions/setup-gradle@v6
+    - name: Compare the calculated version with release-please
+      env:
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        title="$(gh pr list --state open --label 'autorelease: pending' --json title --jq '.[0].title')"
+        if [ -z "$title" ]; then
+          echo 'No pending release pull request; nothing to compare.'
+          exit 0
+        fi
+        expected="${title##* }-SNAPSHOT"
+        actual="$(./gradlew -q properties | sed -n 's/^version: //p')"
+        echo "release-please: $expected"
+        echo "plugin:         $actual"
+        if [ "$expected" != "$actual" ]; then
+          echo "::error::The plugin calculated $actual, but release-please will cut ${title##* }"
+          exit 1
+        fi
+
   publish:
     needs: release-please
     if: ${{ always() && (needs.release-please.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch') }}
@@ -42,11 +81,10 @@ jobs:
         fetch-depth: 0
     - uses: jdx/mise-action@v4
     - uses: gradle/actions/setup-gradle@v6
-    # -Pversion is a bootstrap crutch and must be removed once the plugin versions this project. Until
-    # then the version is set explicitly in gradle.properties, and release-please's `simple` strategy
-    # does not update it - it writes CHANGELOG.md and nothing else. Publishing from the tag without
-    # this would offer 1.0.0-SNAPSHOT, which the portal rejects.
-    - run: ./gradlew publishPlugins -Pversion="${TAG#v}"
+    # No -Pversion: the plugin versions this project, and on the release commit it resolves to the
+    # bare release version on its own. An override that agreed would add nothing, and one that
+    # disagreed would hide the disagreement.
+    - run: ./gradlew publishPlugins
       env:
         GRADLE_PUBLISH_KEY: ${{ secrets.GRADLE_PUBLISH_KEY }}
         GRADLE_PUBLISH_SECRET: ${{ secrets.GRADLE_PUBLISH_SECRET }}

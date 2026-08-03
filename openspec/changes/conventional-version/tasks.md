@@ -126,7 +126,7 @@
 - [x] 10.2 Add `release.yml` with a `release-please` job using `release-type: simple`
 - [x] 10.3 Add a portal publishing job gated on `release_created`, checking out the release tag with
       `fetch-depth: 0` and running `publishPlugins` with the portal credentials
-- [ ] 10.5 Add a fidelity check that compares the plugin's calculated version against the version in
+- [x] 10.5 Add a fidelity check that compares the plugin's calculated version against the version in
       release-please's pending release pull request and fails on divergence
       (`design.md` — Risks, "release-please may change its bump rules")
 
@@ -136,11 +136,11 @@
 - [x] 11.2 Release `1.0.0` to the Gradle Plugin Portal - published; the plugin id is queued for
       Gradle's one-time manual approval of a new id, so it is not resolvable yet and 11.3
       onwards are blocked until that clears
-- [ ] 11.3 Apply the released plugin in this project's own `settings.gradle`, remove the explicit
+- [x] 11.3 Apply the released plugin in this project's own `settings.gradle`, remove the explicit
       version from `gradle.properties`, and remove the `-Pversion` bootstrap crutch from
       `release.yml` - once the plugin calculates the version, overriding it would mask a
       miscalculation rather than guard against one
-- [ ] 11.4 Verify the calculated version matches what release-please records for this repository
+- [x] 11.4 Verify the calculated version matches what release-please records for this repository
 - [x] 11.5 Document in `README.md` how to apply the plugin, the configuration options and their
       release-please counterparts, and how to consume it from source with `includeBuild` during
       development
@@ -152,8 +152,8 @@
 - [x] 12.2 Run two consecutive builds with the configuration cache enabled and confirm the second
       reuses the entry
 - [x] 12.3 Run a build with isolated projects enabled and confirm no violations
-- [ ] 12.4 Confirm the version resolves to the bare release version on the release commit - this
+- [x] 12.4 Confirm the version resolves to the bare release version on the release commit - this
       repository's own `v1.0.0` tag and `## 1.0.0` changelog entry are already the case to check,
       once self-application makes the plugin the source of the version
-- [ ] 12.5 Sync the delta specs into `openspec/specs/` with `/opsx:sync`
-- [ ] 12.6 Commit with `/commit-commands:commit`
+- [x] 12.5 Sync the delta specs into `openspec/specs/` with `/opsx:sync`
+- [x] 12.6 Commit with `/commit-commands:commit`

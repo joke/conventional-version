@@ -362,9 +362,10 @@ being published:
 ./gradlew publishPlugins -Pversion="${TAG#v}"
 ```
 
-That is a bootstrap crutch with a defined end. Once the plugin versions this project, the same commit
-resolves to a bare `1.0.0` on its own, and `-Pversion` must be removed: an override that agrees with
-the calculation adds nothing, while one that disagrees would hide the disagreement.
+That was a bootstrap crutch with a defined end, and it has reached it. With the plugin applied to this
+build, the `v1.0.0` commit resolves to a bare `1.0.0` on its own, so `-Pversion` is gone from
+`release.yml`: an override that agrees with the calculation adds nothing, while one that disagrees
+would hide the disagreement.
 
 This also confirms, rather than merely assumes, the earlier decision not to derive the base version
 from `version.txt`. That file was never created.
@@ -383,10 +384,10 @@ is how `jspecify` can adopt it before any release exists.
   moving target. Mitigated by a CI check comparing the calculated version against the version in
   release-please's pending release pull request, turning the assumption into a failing build rather
   than a wrong publish.
-- **The first release is published but not yet consumable** → The plugin id is queued for manual
-  approval by Gradle, so `1.0.0` cannot be applied by anyone, including this project, until that
-  clears. Nothing to do but wait; the artifacts are already uploaded and the approval is per id, not
-  per version. Self-application and every task that depends on it are blocked until then.
+- ~~**The first release is published but not yet consumable**~~ **Cleared.** The plugin id was queued
+  for manual approval by Gradle, which blocked self-application and everything downstream of it while
+  the artifacts sat uploaded under `plugins.gradle.org/m2`. Approval came through and `1.0.0`
+  resolves; the gate applied once to the id, not to each version, so no later release meets it.
 - **This plugin cannot dogfood itself until 1.0.0 exists** → Accepted, and cheaper than the
   alternative: the snapshot channel that would have allowed it is also what made a bad publish able
   to break this project's own build. Until the first release the version is set explicitly, and the
