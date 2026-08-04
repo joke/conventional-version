@@ -1,5 +1,11 @@
 name: release
 
+# Everything that runs on the default branch, because everything here has to be ordered against
+# release-please and `needs:` does not cross workflow files. Verification used to live in build.yml,
+# which meant it checked out the release commit before release-please had created the tag: the
+# manifest recorded a release the plugin could not locate, and 2.0.0 failed on a repository state that
+# was transient rather than wrong.
+
 on:
   push:
     branches: [main]
@@ -30,14 +36,67 @@ jobs:
     - uses: GoogleCloudPlatform/release-please-action@v5.0
       id: release
 
+  verify:
+    # The default branch's build. `needs` is what this job is for: on a release commit the version
+    # resolves through the tag release-please has just created, so the tag has to exist before the
+    # plugin reads the manifest. Waiting is declared here rather than guessed at with a retry loop,
+    # and the release commit is recognised by release-please's own output rather than by matching a
+    # commit message it owns and can reformat.
+    #
+    # Deliberately not named `build`: that context is required by branch protection and must come from
+    # a job that runs on pull requests. Adding this one to required_status_checks would block every
+    # merge, since no pull request can produce it.
+    needs: release-please
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+    - uses: actions/checkout@v7
+      with:
+        # The pushed commit, with no explicit ref: it is the history release-please just read, and on
+        # a release commit it is what the tag points at.
+        fetch-depth: 0
+    - uses: jdx/mise-action@v4
+    - uses: gradle/actions/setup-gradle@v6.2.0
+    - run: ./gradlew check
+    # The main build applies the *released* plugin, so `check` never exercises the working tree.
+    # This does: a real consuming build that resolves the plugin from source and applies it to a
+    # project in this repository, reading its actual history, tags and manifest. It is also the
+    # only build here that can enable isolated projects, because it applies no pitest.
+    - name: Dogfood the plugin from source
+      run: ./gradlew -p dogfood verifyDogfood -Dorg.gradle.unsafe.isolated-projects=true
+    - name: The plugin from source agrees with the released one
+      run: |
+        released="$(./gradlew -q properties | sed -n 's/^version: //p')"
+        from_source="$(./gradlew -q -p dogfood properties | sed -n 's/^version: //p')"
+        echo "released:    $released"
+        echo "from source: $from_source"
+        if [ "$released" != "$from_source" ]; then
+          echo "::error::The working tree calculates $from_source where the released plugin says $released"
+          exit 1
+        fi
+    - name: Test Report
+      uses: dorny/test-reporter@v3
+      if: ${{ !cancelled() }}
+      with:
+        name: tests
+        path: '**/test-results/*/TEST-*.xml'
+        reporter: java-junit
+
   fidelity:
     # The pending release pull request names the version release-please intends to cut, and predicting
     # that number is this plugin's whole correctness claim. release-please can change its bump rules
     # under us, so the claim is checked here on every push rather than discovered as a wrong
     # coordinate on the portal. The pull request is found by release-please's own label rather than by
     # branch name or action output, neither of which is stable across its versions.
+    #
+    # Never on a push that cuts a release. There the plugin returns the bare release version, while the
+    # comparison below appends -SNAPSHOT unconditionally, so a pending pull request found at that
+    # moment could only produce a false failure on a release that succeeded. That makes the two jobs a
+    # partition: a push either predicts the next release or publishes this one, never both.
     needs: release-please
-    if: ${{ github.event_name == 'push' }}
+    if: ${{ github.event_name == 'push' && needs.release-please.outputs.release_created != 'true' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -56,6 +115,8 @@ jobs:
         GH_TOKEN: ${{ github.token }}
       run: |
         title="$(gh pr list --state open --label 'autorelease: pending' --json title --jq '.[0].title')"
+        # Not the same case as the skip above: an ordinary push with nothing releasable also has no
+        # pending pull request, and that is a genuine no-op rather than a state to avoid.
         if [ -z "$title" ]; then
           echo 'No pending release pull request; nothing to compare.'
           exit 0

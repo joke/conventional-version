@@ -1,32 +1,46 @@
 name: build
 
+# Pull requests only. The default branch is verified in release.yml, where the job can declare
+# `needs: release-please` and so start only once the release tag exists - an ordering that cannot be
+# expressed here, because GitHub Actions has no `needs:` across workflow files. Verifying main from
+# both files raced release-please and failed the 2.0.0 release commit.
+
 on:
   pull_request:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
+  # Named `build` because branch protection requires a status check with that context. It has to be
+  # produced by a job that runs on every pull request; the default-branch job in release.yml is named
+  # differently so it can never be mistaken for this one.
   build:
-    # release-please PRs only ever touch CHANGELOG.md - a full check is superfluous there.
+    # release-please PRs only ever touch CHANGELOG.md and the manifest - a full check is superfluous
+    # there, and the changelog entry for the version being cut would be read back as the base version.
     if: ${{ !startsWith(github.head_ref, 'release-please--') }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
       with:
-        # The version is derived from tags and the changelog, and `check` configures the publication,
-        # so it resolves the version. A shallow clone has no tags and the build fails by design
-        # rather than falling back to a wrong coordinate.
+        # The pull request head, not the merge ref GitHub checks out by default. The version is read
+        # from the first-parent line, and a merge ref puts the base branch there - so the commits
+        # under review sit on the second parent and their conventional-commit types never reach the
+        # calculation at all. Branch protection requires the branch to be current and the repository
+        # merges by rebase, so the head is the history the merge produces. Empty on workflow_dispatch,
+        # where checkout falls back to the dispatched ref.
+        ref: ${{ github.event.pull_request.head.sha }}
+        # The version comes from the release manifest and the tag that locates the recorded release,
+        # and `check` configures the publication, so it resolves the version. A shallow clone has no
+        # tags and the build fails by design rather than falling back to a wrong coordinate.
         fetch-depth: 0
     - uses: jdx/mise-action@v4
     - uses: gradle/actions/setup-gradle@v6.2.0
     - run: ./gradlew check
     # The main build applies the *released* plugin, so `check` never exercises the working tree.
     # This does: a real consuming build that resolves the plugin from source and applies it to a
-    # project in this repository, reading its actual history, tags and changelog. It is also the
+    # project in this repository, reading its actual history, tags and manifest. It is also the
     # only build here that can enable isolated projects, because it applies no pitest.
     - name: Dogfood the plugin from source
       run: ./gradlew -p dogfood verifyDogfood -Dorg.gradle.unsafe.isolated-projects=true
