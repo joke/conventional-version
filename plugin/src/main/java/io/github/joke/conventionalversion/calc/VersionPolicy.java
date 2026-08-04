@@ -1,5 +1,7 @@
 package io.github.joke.conventionalversion.calc;
 
+import java.io.Serializable;
+
 /**
  * The inputs that change the calculated number, named after their release-please counterparts so a
  * divergence between the two configurations is greppable.
@@ -9,7 +11,8 @@ package io.github.joke.conventionalversion.calc;
  * @param bumpPatchForMinorPreMajor release-please {@code bump-patch-for-minor-pre-major}
  */
 public record VersionPolicy(
-        SemanticVersion initialVersion, boolean bumpMinorPreMajor, boolean bumpPatchForMinorPreMajor) {
+        SemanticVersion initialVersion, boolean bumpMinorPreMajor, boolean bumpPatchForMinorPreMajor)
+        implements Serializable {
 
     private static final SemanticVersion DEFAULT_INITIAL_VERSION = new SemanticVersion(1, 0, 0);
 

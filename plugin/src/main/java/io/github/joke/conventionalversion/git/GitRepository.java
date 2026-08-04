@@ -1,5 +1,6 @@
 package io.github.joke.conventionalversion.git;
 
+import io.github.joke.conventionalversion.calc.Commit;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -15,8 +16,23 @@ public class GitRepository {
      */
     private static final String RECORD_SEPARATOR = "\u001e";
 
-    /** {@code %x1e} makes git emit {@link #RECORD_SEPARATOR} after each commit body. */
-    private static final String LOG_FORMAT = "--format=%B%x1e";
+    /** Separates a commit's message from the paths {@code --name-only} prints after it. */
+    private static final String FIELD_SEPARATOR = "\u001f";
+
+    /**
+     * Starts each record and closes the message, because {@code --name-only} prints its paths
+     * <em>after</em> the format. A separator that merely terminated the message would leave one
+     * commit's paths glued to the next commit's message.
+     */
+    private static final String LOG_FORMAT_WITH_PATHS = "--format=%x1e%H%x1f%B%x1f";
+
+    /**
+     * Merge commits are diffed against their first parent, so a merge reports the paths it brought in
+     * rather than nothing at all. Without it the files merged from a branch would be attributed to no
+     * package, and a released package could miss a bump it is owed.
+     */
+    private static final List<String> LOG_WITH_PATHS = List.of(
+            "log", "--first-parent", "--diff-merges=first-parent", "--reverse", LOG_FORMAT_WITH_PATHS, "--name-only");
 
     private static final String REV_PARSE = "rev-parse";
 
@@ -56,6 +72,11 @@ public class GitRepository {
                 .isPresent();
     }
 
+    /** The root of the working tree, which is where release-please keeps its configuration. */
+    public String repositoryRoot() {
+        return runner.run(List.of(REV_PARSE, "--show-toplevel")).strip();
+    }
+
     public String headSha() {
         return runner.run(List.of(REV_PARSE, "HEAD")).strip();
     }
@@ -68,30 +89,44 @@ public class GitRepository {
     }
 
     /**
-     * Messages of the commits reachable from HEAD but not from {@code sinceCommit}, oldest first.
+     * Every commit reachable from HEAD, oldest first, with their paths.
      *
-     * <p>{@code --first-parent} is a no-op on the linear history this targets and is the correct
-     * reading on a repository that uses merge commits, so it is never worse than the alternative.
+     * <p>The whole first-parent history rather than a range, because each package's range starts at
+     * its own base commit and the ranges are sliced from this one read. Asking git per package would
+     * scale the number of processes with the number of packages.
      */
-    public List<String> commitMessagesSince(final String sinceCommit) {
-        return logMessages(List.of("log", "--first-parent", "--reverse", LOG_FORMAT, sinceCommit + "..HEAD"));
-    }
-
-    /** Messages of every commit reachable from HEAD, oldest first. */
-    public List<String> allCommitMessages() {
-        return logMessages(List.of("log", "--first-parent", "--reverse", LOG_FORMAT, "HEAD"));
+    public List<Commit> allCommits() {
+        return logCommits(withRange("HEAD"));
     }
 
     @VisibleForTesting
-    protected List<String> logMessages(final List<String> arguments) {
-        return splitRecords(runner.run(arguments));
+    protected List<String> withRange(final String range) {
+        final var arguments = new java.util.ArrayList<>(LOG_WITH_PATHS);
+        arguments.add(range);
+        return List.copyOf(arguments);
     }
 
     @VisibleForTesting
-    protected List<String> splitRecords(final String output) {
+    protected List<Commit> logCommits(final List<String> arguments) {
+        return parseCommits(runner.run(arguments));
+    }
+
+    @VisibleForTesting
+    protected List<Commit> parseCommits(final String output) {
         return Arrays.stream(output.split(RECORD_SEPARATOR))
-                .map(String::strip)
-                .filter(message -> !message.isEmpty())
+                .filter(entry -> !entry.isBlank())
+                .map(this::parseCommit)
                 .toList();
+    }
+
+    @VisibleForTesting
+    protected Commit parseCommit(final String entry) {
+        final var fields = entry.split(FIELD_SEPARATOR, 3);
+        return new Commit(fields[0].strip(), fields[1].strip(), fields.length < 3 ? List.of() : parsePaths(fields[2]));
+    }
+
+    @VisibleForTesting
+    protected List<String> parsePaths(final String text) {
+        return text.lines().map(String::strip).filter(path -> !path.isEmpty()).toList();
     }
 }

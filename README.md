@@ -29,13 +29,49 @@ In `settings.gradle`:
 
 ```groovy
 plugins {
-    id 'io.github.joke.conventional-version' version '1.0.0'
+    id 'io.github.joke.conventional-version' version '2.0.0'
 }
 ```
 
-That is all. Every project in the build gets the calculated version, including projects included
-after the plugin is applied. Nothing goes in `build.gradle`, and no repository configuration is
-needed — the plugin resolves from `gradlePluginPortal()`, which is already a default.
+That is all. Every project in the build gets a version, including projects included after the plugin
+is applied. Nothing goes in `build.gradle`, and no repository configuration is needed — the plugin
+resolves from `gradlePluginPortal()`, which is already a default.
+
+There is no configuration block. Everything that changes a number is read from release-please's own
+files, so the two cannot disagree.
+
+## Requirements
+
+- **release-please in manifest mode.** Both `release-please-config.json` and
+  `.release-please-manifest.json` must exist at the **root of the git repository** — which is where
+  release-please reads them, and which need not be your Gradle root. If either is missing the build
+  fails rather than guessing. See [Migrating from 1.x](#migrating-from-1x).
+- `git` on the `PATH`.
+- A checkout with full history and tags. On a shallow clone the build **fails** rather than falling
+  back to a default — a plausible-but-wrong coordinate reaching a repository is unrecoverable, a
+  failed build is not. In GitHub Actions that means `fetch-depth: 0` on every job that resolves a
+  version, including the one that runs `check`.
+
+Gradle 9.0 or later on Java 17 or later. The plugin has no runtime dependencies, so it adds nothing
+to your buildscript classpath. The floor is 9.0 because that is where a released version was
+verified by hand; the build no longer executes Gradle builds under test, so treat it as the oldest
+version known to work rather than a continuously proven one.
+
+A minimal single-package setup, which is what most repositories want:
+
+```json
+// release-please-config.json
+{
+  "packages": {
+    ".": { "release-type": "simple" }
+  }
+}
+```
+
+```json
+// .release-please-manifest.json
+{ ".": "1.3.0" }
+```
 
 ## What version you get
 
@@ -59,30 +95,121 @@ repository/maven-snapshots/…/1.4.0-SNAPSHOT/
     thing-1.4.0-20260802.140322-8.jar
 ```
 
-The base version comes from the `CHANGELOG.md` release-please maintains, and the tag only says which
-commit that release was cut at. Tags alone are not enough: release-please's notion of "released" is a
-GitHub Release it created, so a tag made by hand is invisible to it, and a plugin reading the highest
-tag would disagree with release-please exactly when someone has tagged manually.
+The base version comes from `.release-please-manifest.json`, the record release-please itself reads,
+and the tag only says which commit that release was cut at. The manifest rather than the changelog,
+because it is exact where a changelog heading is prose, and it survives a custom changelog format
+that a heading pattern would not. Tags alone are not enough either: release-please's notion of
+"released" is what its manifest records, so a tag made by hand is invisible to it, and a plugin
+reading the highest tag would disagree exactly when someone has tagged manually.
 
-## Configuration
+## Monorepos
 
-Every option mirrors its release-please counterpart, with the same default, so a divergence between
-the two configurations is greppable.
+Declare a package per releasable module and each one gets its own version, from its own commits:
 
-```groovy
-conventionalVersion {
-    initialVersion = '1.0.0'            // release-please: initial-version
-    tagPrefix = 'v'                     // release-please: tag-prefix
-    bumpMinorPreMajor = false           // release-please: bump-minor-pre-major
-    bumpPatchForMinorPreMajor = false   // release-please: bump-patch-for-minor-pre-major
+```json
+{
+  "packages": {
+    "lib/a": { "release-type": "simple", "component": "a" },
+    "lib/b": { "release-type": "simple", "component": "b" }
+  }
 }
 ```
 
-The two pre-major flags only apply below `1.0.0`, and have no effect once the major is non-zero.
+Each Gradle project is matched to the package whose path is the **longest prefix** of its directory,
+so `:lib:a:impl` belongs to `lib/a` rather than to a root package. A commit counts for a package only
+when it touched a path that package claims — which is exactly how release-please attributes commits.
+
+```
+  commit: feat(a): add codec        touches lib/a/**
+                     │
+                     ▼
+       lib/a  →  1.4.0-SNAPSHOT   releasable = true
+       lib/b  →  0.4.2-SNAPSHOT   releasable = false   (its own commits imply nothing)
+```
+
+Gate publishing on the per-project `releasable` and only the modules that earned a release will
+publish.
+
+> **A `simple` monorepo must set `component` (or `package-name`) on every package.** Under
+> `release-type: simple` release-please derives *no* component — not from the path, not from
+> anything — so packages without one all resolve to the same tag, `v<version>`. The build fails
+> naming the colliding packages rather than attributing one package's release to another.
+
+### Projects no package claims
+
+An internal module, a shared component, an aggregator — anything under no package, or under a
+package's `exclude-paths` — is not meant to be released. It gets:
+
+- version `0.0.0-SNAPSHOT`, constant, so its output does not change when an unrelated package
+  releases
+- `bumpType` `NONE` and `releasable` `false`, permanently
+
+This is not an error to fix. The release configuration declaring no package for a directory *is* the
+statement that it is not released.
+
+### Bumps do not propagate along the dependency graph
+
+A commit touching only an unreleased shared module bumps **nothing**, even when released modules
+depend on it:
+
+```
+  fix(shared): handle EOF        touches internal/shared/**
+             │
+             ├──▶ internal/shared   no package        → not releasable
+             │
+             └──▶ lib/a  (depends on :internal:shared) → bump = NONE, nothing releases
+```
+
+release-please attributes commits strictly by path and has no dependency-graph support for Gradle —
+its `node-workspace` and `cargo-workspace` plugins do that for their own ecosystems, and there is no
+Gradle equivalent. Walking Gradle's project graph here would be *more* correct in spirit and would
+disagree with release-please, which is the one failure this plugin exists to prevent.
+
+If a change to a shared module should release something, scope the commit to a released package, or
+put a `Release-As:` footer on it.
+
+### Linked versions
+
+The `linked-versions` plugin is honoured: every member of a group takes the highest version any
+member calculated, and every member becomes releasable when any member is — including members whose
+own commits imply nothing. That is what release-please does, so it is what happens here.
+
+## Configuration
+
+Every option is read from `release-please-config.json`. There is no second place to set anything.
+
+| Option | Effect |
+|---|---|
+| `initial-version` | version for a package that has never released; defaults to `1.0.0` |
+| `bump-minor-pre-major` | below `1.0.0`, treat a breaking change as minor |
+| `bump-patch-for-minor-pre-major` | below `1.0.0`, treat a feature as patch |
+| `component`, `package-name` | the component a package's tags carry |
+| `include-component-in-tag` | whether the tag carries the component; defaults to `true` |
+| `tag-separator` | between component and version; defaults to `-` |
+| `include-v-in-tag` | whether the version is prefixed with `v`; defaults to `true` |
+| `exclude-paths` | subtrees a package does not claim |
+
+An option set on a package overrides the same option set at the top level, as release-please resolves
+them. The two pre-major flags only apply below `1.0.0`, and have no effect once the major is
+non-zero.
+
+### What is refused
+
+Configuration whose effect on a version is not modelled fails the build, naming it. Producing a
+number that quietly ignores your configuration is the outcome this plugin exists to prevent, so
+refusing loudly is the deliberate behaviour — and it keeps deferring a feature safe rather than
+dangerous.
+
+- **Plugins**: `node-workspace`, `cargo-workspace` and `maven-workspace` bump dependents. Any plugin
+  type not recognised is refused too, on the assumption that an unknown plugin moves versions.
+  `sentence-case` and `group-priority` are ignored without complaint, because neither changes a
+  number.
+- **Options**: `release-as`, `prerelease`, `prerelease-type`, `versioning`, `bootstrap-sha` and
+  `last-release-sha`, each of which changes a version or the range it is calculated over.
 
 ## Beyond the version
 
-Each project gets a `conventionalVersion` extension:
+Each project gets a `conventionalVersion` extension describing **its own** package:
 
 ```groovy
 def info = project.extensions.conventionalVersion
@@ -106,31 +233,68 @@ tasks.named('jar') {
 }
 ```
 
-## Requirements
+`sha` is the same for every project — it names the commit the build came from. Stamping it into a jar
+makes that jar change on every commit; the version string is what this plugin keeps stable.
 
-- `git` on the `PATH`.
-- A checkout with full history and tags. On a shallow clone the build **fails** rather than falling
-  back to a default — a plausible-but-wrong coordinate reaching a repository is unrecoverable, a
-  failed build is not. In GitHub Actions that means `fetch-depth: 0` on every job that resolves a
-  version, including the one that runs `check`.
+## Migrating from 1.x
 
-Gradle 9.0 or later on Java 17 or later. The plugin has no runtime dependencies, so it adds nothing
-to your buildscript classpath. The floor is 9.0 because that is where a released version was
-verified by hand; the build no longer executes Gradle builds under test, so treat it as the oldest
-version known to work rather than a continuously proven one.
+2.0.0 requires manifest mode and removes the `conventionalVersion { }` block. The migration is
+mechanical and preserves your tags, your changelog and the numbers you were getting.
+
+**1. Add two files at the root of the repository.** Keeping `release-type: simple` reproduces
+non-manifest behaviour exactly:
+
+```json
+// release-please-config.json
+{ "packages": { ".": { "release-type": "simple" } } }
+```
+
+```json
+// .release-please-manifest.json — the version you have already released
+{ ".": "1.3.0" }
+```
+
+**2. Drop `release-type` from the release workflow.** The action finds both files on its own:
+
+```yaml
+- uses: GoogleCloudPlatform/release-please-action@v5.0
+  id: release
+```
+
+**3. Delete the `conventionalVersion { }` block** from `settings.gradle` and move anything it set:
+
+| removed | set instead |
+|---|---|
+| `initialVersion` | `initial-version` |
+| `bumpMinorPreMajor` | `bump-minor-pre-major` |
+| `bumpPatchForMinorPreMajor` | `bump-patch-for-minor-pre-major` |
+| `tagPrefix` | *no counterpart* — see below |
+
+`tagPrefix` mirrored a release-please option that **does not exist**. Its default `v` corresponds to
+`include-v-in-tag`, which is enabled by default, so if you left it alone there is nothing to do. If
+you set it to an empty string, set `"include-v-in-tag": false` instead.
+
+`CHANGELOG.md` is no longer read. release-please still writes it; the plugin just stops caring.
 
 ## Configuration cache and isolated projects
 
-Both are supported by construction. Git is read through a
-`ValueSource`, so the cache entry invalidates when a commit or tag changes it — rather than serving a
-stale version until something unrelated invalidates it. Versions are assigned through
-`gradle.lifecycle.beforeProject`, so git is read once per build no matter how many projects there
-are, and no project reaches into another.
+Both are supported by construction. Git and release-please's configuration are read through a
+`ValueSource`, so the cache entry invalidates when a commit, a tag or the configuration changes it —
+rather than serving a stale version until something unrelated invalidates it.
+
+Versions are assigned through `gradle.lifecycle.beforeProject`, so everything is read once per build
+no matter how many projects or packages there are. Per-project versions cost a map lookup in a value
+computed before any project was evaluated, and no project reaches into another — which is what makes
+per-project versions compatible with isolated projects at all.
 
 Neither property is verified by executing a build. If you depend on them, run your build once with
 `--configuration-cache` and `-Dorg.gradle.unsafe.isolated-projects=true` before trusting a new
 release — a plugin can satisfy both by inspection and still fail on a specific Gradle version, which
 has happened here once already.
+
+Multi-package behaviour is covered by unit tests rather than by a real consuming build, because this
+repository declares a single package and cannot exhibit it. Check the first monorepo you point this
+at against release-please's own release pull request before trusting the numbers.
 
 ## Development
 

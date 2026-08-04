@@ -24,10 +24,11 @@ jobs:
       release_created: ${{ steps.release.outputs.release_created }}
       tag_name: ${{ steps.release.outputs.tag_name }}
     steps:
+    # No `with:`. The release type and everything else live in release-please-config.json, which the
+    # action finds on its own - the same file the plugin reads, so the two cannot disagree about how
+    # this repository is released.
     - uses: GoogleCloudPlatform/release-please-action@v5.0
       id: release
-      with:
-        release-type: simple
 
   fidelity:
     # The pending release pull request names the version release-please intends to cut, and predicting

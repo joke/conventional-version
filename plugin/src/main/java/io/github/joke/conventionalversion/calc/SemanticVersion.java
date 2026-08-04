@@ -2,11 +2,12 @@ package io.github.joke.conventionalversion.calc;
 
 import static java.lang.Integer.parseInt;
 
+import java.io.Serializable;
 import java.util.Optional;
 import java.util.regex.Pattern;
 
 /** A {@code major.minor.patch} version, without pre-release or build metadata. */
-public record SemanticVersion(int major, int minor, int patch) implements Comparable<SemanticVersion> {
+public record SemanticVersion(int major, int minor, int patch) implements Comparable<SemanticVersion>, Serializable {
 
     private static final Pattern PATTERN = Pattern.compile("(\\d++)\\.(\\d++)\\.(\\d++)");
 

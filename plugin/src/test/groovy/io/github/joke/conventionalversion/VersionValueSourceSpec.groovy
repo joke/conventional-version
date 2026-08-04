@@ -1,38 +1,48 @@
 package io.github.joke.conventionalversion
 
+import io.github.joke.conventionalversion.VersionCatalogue.PackageVersion
 import io.github.joke.conventionalversion.calc.Bump
 import io.github.joke.conventionalversion.calc.RepositoryState
 import io.github.joke.conventionalversion.calc.SemanticVersion
 import io.github.joke.conventionalversion.calc.VersionCalculator
 import io.github.joke.conventionalversion.calc.VersionPolicy
 import io.github.joke.conventionalversion.calc.VersionResult
+import io.github.joke.conventionalversion.config.ConfigurationReader
+import io.github.joke.conventionalversion.config.JsonObject
+import io.github.joke.conventionalversion.config.JsonParser
+import io.github.joke.conventionalversion.config.LinkedGroup
+import io.github.joke.conventionalversion.config.ManifestReader
+import io.github.joke.conventionalversion.config.ReleaseConfiguration
+import io.github.joke.conventionalversion.config.ReleasePackage
+import io.github.joke.conventionalversion.config.TagFormat
 import io.github.joke.conventionalversion.git.ConventionalVersionException
 import io.github.joke.conventionalversion.git.RepositoryStateReader
+import io.github.joke.conventionalversion.git.RepositoryStateReader.PackageState
 import org.gradle.api.file.Directory
 import org.gradle.api.file.DirectoryProperty
-import org.gradle.api.provider.Property
 import spock.lang.Specification
 import spock.lang.TempDir
 
 class VersionValueSourceSpec extends Specification {
 
     @TempDir
-    File projectDirectory
+    File root
+
+    static pkg(String path, String component = '') {
+        new ReleasePackage(path, component, [], TagFormat.defaults(), VersionPolicy.defaults())
+    }
 
     VersionValueSource source = Spy()
     VersionValueSource.Parameters parameters = Mock()
     DirectoryProperty projectDirectoryProperty = Mock()
     Directory directory = Mock()
-    Property<String> initialVersion = Mock()
-    Property<String> tagPrefix = Mock()
-    Property<Boolean> bumpMinorPreMajor = Mock()
-    Property<Boolean> bumpPatchForMinorPreMajor = Mock()
 
-    def 'obtain hands the repository state and the policy to the calculator'() {
-        def state = new RepositoryState(null, false, ['feat: a'], 'head1')
-        def policy = VersionPolicy.defaults()
-        def expected = new VersionResult('1.0.0-SNAPSHOT', Bump.MINOR, true, 'head1')
-        VersionCalculator calculator = Mock()
+    def 'obtain reads the root, the configuration and the manifest, then builds the catalogue'() {
+        def configuration = new ReleaseConfiguration([pkg('.')], [])
+        def released = ['.': new SemanticVersion(1, 3, 0)]
+        def states = [new PackageState(pkg('.'), new RepositoryState(null, false, [], 'head1'))]
+        def expected = new VersionCatalogue(root.absolutePath, [], VersionCatalogue.unreleasable('head1'))
+        RepositoryStateReader reader = Mock()
 
         when:
         def result = source.obtain()
@@ -41,11 +51,13 @@ class VersionValueSourceSpec extends Specification {
         1 * source.parameters >> parameters
         1 * parameters.projectDirectory >> projectDirectoryProperty
         1 * projectDirectoryProperty.get() >> directory
-        1 * directory.asFile >> projectDirectory
-        1 * source.calculator() >> calculator
-        1 * source.readState(projectDirectory) >> state
-        1 * source.policy() >> policy
-        1 * calculator.calculate(state, policy) >> expected
+        1 * directory.asFile >> root
+        1 * source.reader(root) >> reader
+        1 * reader.repositoryRoot() >> root.absolutePath
+        1 * source.readConfiguration(root.absolutePath) >> configuration
+        1 * source.readManifest(root.absolutePath) >> released
+        1 * reader.read(configuration, released) >> states
+        1 * source.catalogue(root.absolutePath, [], states) >> expected
         1 * source._
         0 * _
 
@@ -53,122 +65,205 @@ class VersionValueSourceSpec extends Specification {
         result.is(expected)
     }
 
-    def 'readState reads with the configured tag prefix'() {
-        def state = new RepositoryState(null, false, ['feat: a'], 'head1')
-        RepositoryStateReader reader = Mock()
+    def 'catalogue reconciles linked groups and carries the unmatched result'() {
+        def groups = [new LinkedGroup('core', ['a'])]
+        def states = [new PackageState(pkg('.'), new RepositoryState(null, false, [], 'head1'))]
+        def calculated = [new PackageVersion(pkg('.'), new VersionResult('1.0.0-SNAPSHOT', Bump.NONE, false, 'head1'))]
+        def unmatched = VersionCatalogue.unreleasable('head1')
+        LinkedVersionReconciler reconciler = Mock()
 
         when:
-        def read = source.readState(projectDirectory)
+        def result = source.catalogue(root.absolutePath, groups, states)
 
         then:
-        1 * source.reader(projectDirectory) >> reader
-        1 * source.parameters >> parameters
-        1 * parameters.tagPrefix >> tagPrefix
-        1 * tagPrefix.get() >> 'release-'
-        1 * reader.read('release-') >> state
+        1 * source.calculateAll(states) >> calculated
+        1 * source.reconciler() >> reconciler
+        1 * reconciler.reconcile(groups, calculated) >> calculated
+        1 * source.unmatched(states) >> unmatched
         1 * source._
         0 * _
 
         expect:
-        read.is(state)
+        result == new VersionCatalogue(root.absolutePath, calculated, unmatched)
     }
 
-    /**
-     * A reader is built from three collaborators that are observable only through what they do, so
-     * all three are exercised: the changelog reader through a changelog file, and the repository
-     * with its command runner through a git read that fails in - and names - the same directory.
-     */
-    def 'reader is wired with a changelog reader and a repository rooted at the given directory'() {
-        new File(projectDirectory, 'CHANGELOG.md').text = '## 1.3.0 (2022-02-12)\n'
+    def 'calculateAll hands each package its own state and its own policy'() {
+        def declared = pkg('lib/a')
+        def state = new RepositoryState(null, false, ['feat: a'], 'head1')
+        def expected = new VersionResult('1.0.0-SNAPSHOT', Bump.MINOR, true, 'head1')
+        VersionCalculator calculator = Mock()
 
         when:
-        def reader = source.reader(projectDirectory)
+        def results = source.calculateAll([new PackageState(declared, state)])
 
         then:
+        1 * source.calculator() >> calculator
+        1 * calculator.calculate(state, declared.policy()) >> expected
         1 * source._
         0 * _
 
+        expect:
+        results == [new PackageVersion(declared, expected)]
+    }
+
+    def 'unmatched carries the head sha so an unreleased project still records its commit'() {
+        def states = [new PackageState(pkg('.'), new RepositoryState(null, false, [], 'head1'))]
+
+        expect:
+        source.unmatched(states) == new VersionResult('0.0.0-SNAPSHOT', Bump.NONE, false, 'head1')
+    }
+
+    def 'unmatched falls back to no sha when there is no package at all'() {
+        expect:
+        source.unmatched([]) == new VersionResult('0.0.0-SNAPSHOT', Bump.NONE, false, '')
+    }
+
+    def 'readConfiguration parses the configuration file and interprets it'() {
+        def parsed = new JsonObject([:], 'release-please-config.json')
+        def expected = new ReleaseConfiguration([pkg('.')], [])
+        JsonParser parser = Mock()
+        ConfigurationReader configurationReader = Mock()
+
         when:
-        def recorded = reader.findRecordedRelease()
+        def result = source.readConfiguration(root.absolutePath)
 
         then:
+        1 * source.readFile(root.absolutePath, 'release-please-config.json') >> '{}'
+        1 * source.parser() >> parser
+        1 * parser.parse('{}', 'release-please-config.json') >> parsed
+        1 * source.configurationReader() >> configurationReader
+        1 * configurationReader.read(parsed) >> expected
+        1 * source._
         0 * _
 
-        when: 'a git read is attempted where there is no repository'
-        reader.allCommitMessages()
+        expect:
+        result.is(expected)
+    }
+
+    def 'readManifest parses the manifest file and interprets it'() {
+        def parsed = new JsonObject([:], '.release-please-manifest.json')
+        def expected = ['.': new SemanticVersion(1, 3, 0)]
+        JsonParser parser = Mock()
+        ManifestReader manifestReader = Mock()
+
+        when:
+        def result = source.readManifest(root.absolutePath)
+
+        then:
+        1 * source.readFile(root.absolutePath, '.release-please-manifest.json') >> '{}'
+        1 * source.parser() >> parser
+        1 * parser.parse('{}', '.release-please-manifest.json') >> parsed
+        1 * source.manifestReader() >> manifestReader
+        1 * manifestReader.read(parsed) >> expected
+        1 * source._
+        0 * _
+
+        expect:
+        result.is(expected)
+    }
+
+    def 'readFile reads a file that is there'() {
+        new File(root, 'release-please-config.json') << '{"packages": {}}'
+
+        when:
+        def content = source.readFile(root.absolutePath, 'release-please-config.json')
+
+        then:
+        1 * source.contentOf(new File(root, 'release-please-config.json').toPath()) >> '{"packages": {}}'
+        1 * source._
+        0 * _
+
+        expect:
+        content == '{"packages": {}}'
+    }
+
+    def 'readFile fails naming both files, because manifest mode is required'() {
+        when:
+        source.readFile(root.absolutePath, 'release-please-config.json')
 
         then:
         def error = thrown(ConventionalVersionException)
+        1 * source._
         0 * _
 
         expect:
-        recorded.get() == new SemanticVersion(1, 3, 0)
-        error.message.contains(projectDirectory.absolutePath)
+        error.message == "No release-please-config.json at ${root.absolutePath}. conventional-version requires" +
+                ' release-please to run in manifest mode, which means both release-please-config.json and' +
+                ' .release-please-manifest.json at the root of the repository.'
     }
 
-    /** Exercised rather than merely constructed, so the wiring of parser and reducer is proven. */
-    def 'calculator combines the message parser and the bump reducer'() {
-        def state = new RepositoryState(new SemanticVersion(1, 3, 0), false, ['feat: add codec'], 'head1')
+    def 'contentOf reads the text of a file'() {
+        def file = new File(root, 'thing.json')
+        file << 'content'
+
+        expect:
+        source.contentOf(file.toPath()) == 'content'
+    }
+
+    def 'contentOf fails when the file cannot be read'() {
+        when:
+        source.contentOf(new File(root, 'missing.json').toPath())
+
+        then:
+        thrown(UncheckedIOException)
+    }
+
+    def 'builds the collaborators it needs'() {
+        expect:
+        source.reconciler() instanceof LinkedVersionReconciler
+        source.parser() instanceof JsonParser
+        source.configurationReader() instanceof ConfigurationReader
+        source.manifestReader() instanceof ManifestReader
+        source.messageParser() instanceof io.github.joke.conventionalversion.calc.CommitMessageParser
+        source.reducer() instanceof io.github.joke.conventionalversion.calc.BumpReducer
+        source.runner(root) instanceof io.github.joke.conventionalversion.git.GitCommandRunner
+    }
+
+    def 'the calculator is built from a message parser and a bump reducer'() {
+        def messageParser = new io.github.joke.conventionalversion.calc.CommitMessageParser()
+        def reducer = new io.github.joke.conventionalversion.calc.BumpReducer()
 
         when:
         def calculator = source.calculator()
 
         then:
+        1 * source.messageParser() >> messageParser
+        1 * source.reducer() >> reducer
         1 * source._
         0 * _
 
         expect:
-        verifyAll(calculator.calculate(state, VersionPolicy.defaults())) {
-            version == '1.4.0-SNAPSHOT'
-            bump == Bump.MINOR
-            releasable
-            sha == 'head1'
-        }
+        calculator instanceof VersionCalculator
     }
 
-    def 'policy carries the configured initial version and both pre-major flags'() {
+    def 'the state reader is built over a repository'() {
+        def repository = new io.github.joke.conventionalversion.git.GitRepository(
+                new io.github.joke.conventionalversion.git.GitCommandRunner(root))
+
         when:
-        def policy = source.policy()
+        def reader = source.reader(root)
 
         then:
-        3 * source.parameters >> parameters
-        1 * parameters.initialVersion >> initialVersion
-        1 * initialVersion.get() >> '0.1.0'
-        1 * parameters.bumpMinorPreMajor >> bumpMinorPreMajor
-        1 * bumpMinorPreMajor.get() >> minor
-        1 * parameters.bumpPatchForMinorPreMajor >> bumpPatchForMinorPreMajor
-        1 * bumpPatchForMinorPreMajor.get() >> patch
+        1 * source.repository(root) >> repository
         1 * source._
         0 * _
 
         expect:
-        verifyAll(policy) {
-            initialVersion == new SemanticVersion(0, 1, 0)
-            bumpMinorPreMajor == minor
-            bumpPatchForMinorPreMajor == patch
-        }
-
-        where: 'both flags travel independently, so neither can be read in place of the other'
-        minor | patch
-        true  | false
-        false | true
-        true  | true
-        false | false
+        reader instanceof RepositoryStateReader
     }
 
-    def 'policy fails when the configured initial version is not a semantic version'() {
+    def 'the repository is built over a command runner in the given directory'() {
+        def runner = new io.github.joke.conventionalversion.git.GitCommandRunner(root)
+
         when:
-        source.policy()
+        def repository = source.repository(root)
 
         then:
-        1 * source.parameters >> parameters
-        1 * parameters.initialVersion >> initialVersion
-        1 * initialVersion.get() >> 'one point oh'
-        def error = thrown(ConventionalVersionException)
+        1 * source.runner(root) >> runner
         1 * source._
         0 * _
 
         expect:
-        error.message == "initialVersion must be a major.minor.patch version, but was 'one point oh'"
+        repository instanceof io.github.joke.conventionalversion.git.GitRepository
     }
 }

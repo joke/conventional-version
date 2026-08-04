@@ -1,0 +1,3 @@
+schema: spec-driven
+created: 2026-08-04
+goal: Require release-please manifest mode and derive per-package versions for monorepos

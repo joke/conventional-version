@@ -1,201 +1,194 @@
 package io.github.joke.conventionalversion.git
 
-import io.github.joke.conventionalversion.calc.ChangelogReader
-import io.github.joke.conventionalversion.calc.RepositoryState
+import io.github.joke.conventionalversion.calc.Commit
 import io.github.joke.conventionalversion.calc.SemanticVersion
+import io.github.joke.conventionalversion.calc.VersionPolicy
+import io.github.joke.conventionalversion.config.ReleaseConfiguration
+import io.github.joke.conventionalversion.config.ReleasePackage
+import io.github.joke.conventionalversion.config.TagFormat
 import spock.lang.Specification
-import spock.lang.TempDir
 
 class RepositoryStateReaderSpec extends Specification {
 
-    @TempDir
-    File projectDirectory
+    static pkg(String path, String component = '', List<String> excluded = []) {
+        new ReleasePackage(path, component, excluded, TagFormat.defaults(), VersionPolicy.defaults())
+    }
 
     GitRepository repository = Mock()
-    ChangelogReader changelogReader = Mock()
+    RepositoryStateReader reader = Spy(constructorArgs: [repository])
 
-    RepositoryStateReader reader
-
-    def setup() {
-        reader = Spy(RepositoryStateReader,
-                constructorArgs: [repository, changelogReader, projectDirectory.toPath()])
-    }
-
-    def 'read verifies the repository before anything else, then reads the state at the release'() {
-        def recorded = new SemanticVersion(1, 3, 0)
-        def expected = new RepositoryState(recorded, false, ['feat: a'], 'head1')
+    def 'read verifies the repository, reads head and the history once, and pairs each package'() {
+        def root = pkg('.')
+        def history = [new Commit('sha1', 'feat: a', ['a.txt'])]
 
         when:
-        def state = reader.read('v')
+        def states = reader.read(new ReleaseConfiguration([root], []), ['.': new SemanticVersion(1, 3, 0)])
 
         then:
         1 * repository.verifyUsable()
-        1 * reader.findRecordedRelease() >> Optional.of(recorded)
         1 * repository.headSha() >> 'head1'
-        1 * reader.stateAtRelease(recorded, 'v', 'head1') >> expected
+        1 * repository.allCommits() >> history
+        1 * reader.stateOf(root, new SemanticVersion(1, 3, 0), history, 'head1') >>
+                new io.github.joke.conventionalversion.calc.RepositoryState(null, false, [], 'head1')
         1 * reader._
         0 * _
 
         expect:
-        state.is(expected)
+        states*.declared() == [root]
     }
 
-    def 'read falls back to the never-released state when the changelog records nothing'() {
-        def expected = new RepositoryState(null, false, ['feat: first'], 'head1')
+    def 'read treats a package absent from the manifest as never released'() {
+        def libA = pkg('lib/a', 'a')
 
         when:
-        def state = reader.read('v')
+        reader.read(new ReleaseConfiguration([libA], []), [:])
 
         then:
         1 * repository.verifyUsable()
-        1 * reader.findRecordedRelease() >> Optional.empty()
         1 * repository.headSha() >> 'head1'
-        1 * reader.stateWithoutRelease('head1') >> expected
+        1 * repository.allCommits() >> []
+        1 * reader.stateOf(libA, null, [], 'head1') >>
+                new io.github.joke.conventionalversion.calc.RepositoryState(null, false, [], 'head1')
+        1 * reader._
+        0 * _
+    }
+
+    def 'stateOf analyses the whole history for a package that has never released'() {
+        def libA = pkg('lib/a')
+        def history = [new Commit('sha1', 'feat: a', ['lib/a/Main.java'])]
+
+        when:
+        def state = reader.stateOf(libA, null, history, 'head1')
+
+        then:
+        1 * reader.messagesOf(libA, history) >> ['feat: a']
         1 * reader._
         0 * _
 
         expect:
-        state.is(expected)
+        state.recordedRelease() == null
+        !state.headIsReleaseCommit()
+        state.commitMessages() == ['feat: a']
+        state.headSha() == 'head1'
     }
 
-    def 'findRecordedRelease asks the changelog reader what the changelog says'() {
-        def recorded = new SemanticVersion(1, 3, 0)
+    def 'stateOf slices the history at the package base commit'() {
+        def libA = pkg('lib/a')
+        def history = [new Commit('base', 'chore: release', []), new Commit('sha2', 'feat: a', ['lib/a/M.java'])]
 
         when:
-        def found = reader.findRecordedRelease()
+        def state = reader.stateOf(libA, new SemanticVersion(1, 3, 0), history, 'head1')
 
         then:
-        1 * reader.readChangelog() >> '## 1.3.0 (2022-02-12)\n'
-        1 * changelogReader.findLatestRelease('## 1.3.0 (2022-02-12)\n') >> Optional.of(recorded)
+        1 * reader.baseShaOf(libA, new SemanticVersion(1, 3, 0)) >> 'base'
+        1 * reader.since('base', history) >> [history[1]]
+        1 * reader.messagesOf(libA, [history[1]]) >> ['feat: a']
         1 * reader._
         0 * _
 
         expect:
-        found.get() == recorded
+        state.recordedRelease() == new SemanticVersion(1, 3, 0)
+        !state.headIsReleaseCommit()
     }
 
-    /** An absent changelog is the "never released" case, not an error. */
-    def 'readChangelog yields empty text when there is no changelog'() {
+    def 'stateOf reports HEAD as the release commit when the base is HEAD'() {
+        def libA = pkg('lib/a')
+
         when:
-        def text = reader.readChangelog()
+        def state = reader.stateOf(libA, new SemanticVersion(1, 3, 0), [], 'head1')
 
         then:
+        1 * reader.baseShaOf(libA, new SemanticVersion(1, 3, 0)) >> 'head1'
+        1 * reader.since('head1', []) >> []
+        1 * reader.messagesOf(libA, []) >> []
         1 * reader._
         0 * _
 
         expect:
-        text == ''
+        state.headIsReleaseCommit()
     }
 
-    def 'readChangelog yields the file content when the changelog exists'() {
-        new File(projectDirectory, 'CHANGELOG.md').text = '## 1.3.0 (2022-02-12)\n'
-
+    def 'baseShaOf looks for the tag the package would be released under'() {
         when:
-        def text = reader.readChangelog()
+        def sha = reader.baseShaOf(pkg('lib/a', 'a'), new SemanticVersion(1, 3, 0))
 
         then:
+        1 * repository.findTaggedCommit('a-v1.3.0') >> Optional.of('base1')
         1 * reader._
         0 * _
 
         expect:
-        text == '## 1.3.0 (2022-02-12)\n'
+        sha == 'base1'
     }
 
-    /** Bytes that are not valid UTF-8 make the read fail without depending on file permissions. */
-    def 'readChangelog wraps a failure to read the changelog'() {
-        new File(projectDirectory, 'CHANGELOG.md').bytes = [0xC3, 0x28] as byte[]
-
+    def 'baseShaOf fails naming the package, the version and the tag it looked for'() {
         when:
-        reader.readChangelog()
+        reader.baseShaOf(pkg('lib/a', 'a'), new SemanticVersion(1, 3, 0))
 
         then:
-        thrown(UncheckedIOException)
-        1 * reader._
-        0 * _
-    }
-
-    def 'stateAtRelease composes the tag from the prefix and the recorded version'() {
-        def recorded = new SemanticVersion(1, 3, 0)
-
-        when:
-        def state = reader.stateAtRelease(recorded, 'release-', 'head1')
-
-        then:
-        1 * repository.findTaggedCommit('release-1.3.0') >> Optional.of('base1')
-        1 * repository.commitMessagesSince('base1') >> ['feat: a']
-        1 * reader._
-        0 * _
-
-        expect:
-        verifyAll(state) {
-            recordedRelease == recorded
-            !headIsReleaseCommit
-            commitMessages == ['feat: a']
-            headSha == 'head1'
-        }
-    }
-
-    def 'stateAtRelease reports HEAD as the release commit when the tag points at it'() {
-        def recorded = new SemanticVersion(1, 3, 0)
-
-        when:
-        def state = reader.stateAtRelease(recorded, 'v', 'head1')
-
-        then:
-        1 * repository.findTaggedCommit('v1.3.0') >> Optional.of('head1')
-        1 * repository.commitMessagesSince('head1') >> []
-        1 * reader._
-        0 * _
-
-        expect:
-        state.headIsReleaseCommit
-    }
-
-    def 'stateAtRelease fails when the changelog records a release that has no tag'() {
-        def recorded = new SemanticVersion(1, 3, 0)
-
-        when:
-        reader.stateAtRelease(recorded, 'v', 'head1')
-
-        then:
-        1 * repository.findTaggedCommit('v1.3.0') >> Optional.empty()
+        1 * repository.findTaggedCommit('a-v1.3.0') >> Optional.empty()
         def error = thrown(ConventionalVersionException)
         1 * reader._
         0 * _
 
         expect:
-        error.message == 'The changelog records 1.3.0 as the last release but no tag v1.3.0 exists.' +
-                ' Fetch tags, or correct the tag prefix.'
+        error.message == "The release manifest records 1.3.0 for the package 'lib/a' but no tag a-v1.3.0 exists." +
+                " Fetch tags, or correct the package's component and tag format."
     }
 
-    def 'stateWithoutRelease takes the whole history and records no release'() {
+    def 'since yields the commits after the base'() {
+        def history = [new Commit('a', 'one', []), new Commit('b', 'two', []), new Commit('c', 'three', [])]
+
+        expect:
+        reader.since('a', history) == [history[1], history[2]]
+        reader.since('c', history) == []
+    }
+
+    def 'since yields nothing when the base is not on the first-parent line'() {
+        expect:
+        reader.since('missing', [new Commit('a', 'one', [])]) == []
+    }
+
+    def 'messagesOf keeps only the commits touching a path the package claims'() {
+        def commits = [new Commit('a', 'feat: a', ['lib/a/M.java']), new Commit('b', 'feat: b', ['lib/b/M.java'])]
+
+        expect:
+        reader.messagesOf(pkg('lib/a'), commits) == ['feat: a']
+    }
+
+    def 'messagesOf keeps a commit touching several packages for each of them'() {
+        def commits = [new Commit('a', 'feat: both', ['lib/a/M.java', 'lib/b/M.java'])]
+
+        expect:
+        reader.messagesOf(pkg('lib/a'), commits) == ['feat: both']
+        reader.messagesOf(pkg('lib/b'), commits) == ['feat: both']
+    }
+
+    def 'messagesOf drops a commit touching only paths the package excludes'() {
+        def commits = [new Commit('a', 'fix: shared', ['internal/shared/M.java'])]
+
+        expect:
+        reader.messagesOf(pkg('.', '', ['internal']), commits) == []
+    }
+
+    def 'touches reports whether a commit changed anything the package claims'() {
+        expect:
+        reader.touches(pkg('lib/a'), new Commit('a', 'm', ['lib/a/M.java']))
+        !reader.touches(pkg('lib/a'), new Commit('a', 'm', ['lib/b/M.java']))
+        !reader.touches(pkg('lib/a'), new Commit('a', 'm', []))
+    }
+
+    def 'repositoryRoot verifies the repository before asking for its root'() {
         when:
-        def state = reader.stateWithoutRelease('head1')
+        def root = reader.repositoryRoot()
 
         then:
-        1 * reader.allCommitMessages() >> ['feat: first']
+        1 * repository.verifyUsable()
+        1 * repository.repositoryRoot() >> '/home/me/project'
         1 * reader._
         0 * _
 
         expect:
-        verifyAll(state) {
-            recordedRelease == null
-            !headIsReleaseCommit
-            commitMessages == ['feat: first']
-            headSha == 'head1'
-        }
-    }
-
-    def 'allCommitMessages asks the repository for everything reachable from HEAD'() {
-        when:
-        def messages = reader.allCommitMessages()
-
-        then:
-        1 * repository.allCommitMessages() >> ['feat: first']
-        1 * reader._
-        0 * _
-
-        expect:
-        messages == ['feat: first']
+        root == '/home/me/project'
     }
 }
