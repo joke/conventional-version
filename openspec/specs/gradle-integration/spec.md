@@ -15,18 +15,25 @@ The plugin SHALL be applied in `settings.gradle` (or `settings.gradle.kts`) unde
 #### Scenario: Single-project build
 
 - **WHEN** the plugin is applied in the settings file of a build with only a root project
-- **THEN** the root project's version is the calculated version
+- **THEN** the root project's version is the version calculated for the package that claims it
 
-#### Scenario: Multi-project build
+#### Scenario: Multi-project build under one package
 
-- **WHEN** the plugin is applied in the settings file of a build containing several subprojects
-- **THEN** every project in the build carries the same calculated version, with no plugin application
-  in any project build file
+- **WHEN** the plugin is applied in the settings file of a build containing several subprojects, and
+  one package claims all of their paths
+- **THEN** every project in the build carries that package's version, with no plugin application in
+  any project build file
+
+#### Scenario: Multi-project build across several packages
+
+- **WHEN** the plugin is applied in the settings file of a build whose subprojects lie under
+  different packages
+- **THEN** each project carries the version calculated for the package that claims its path
 
 #### Scenario: Projects added later
 
 - **WHEN** a project is included in the settings file after the plugin is applied
-- **THEN** that project also carries the calculated version
+- **THEN** that project also carries the version of the package that claims it
 
 ### Requirement: Version available during configuration
 
@@ -100,7 +107,8 @@ the build contains.
 
 The plugin SHALL expose the calculated version, the reduced bump type, the releasability signal and
 the current commit hash as lazily evaluated values that build logic can consume, including inside
-task configuration under the configuration cache.
+task configuration under the configuration cache. The version, bump type and releasability signal
+SHALL describe the package that claims the project reading them.
 
 #### Scenario: Version signal
 
@@ -109,13 +117,19 @@ task configuration under the configuration cache.
 
 #### Scenario: Bump type signal
 
-- **WHEN** the analysed commits reduce to a minor bump
+- **WHEN** the commits analysed for the project's package reduce to a minor bump
 - **THEN** the exposed bump type is `MINOR`
 
 #### Scenario: Releasability signal drives publishing
 
 - **WHEN** build logic reads the exposed releasability signal
-- **THEN** it receives whether the analysed commits warrant a release
+- **THEN** it receives whether the commits analysed for that project's package warrant a release
+
+#### Scenario: Signals differ between projects
+
+- **WHEN** two projects lie under different packages and only one package has releasable commits
+- **THEN** each project's exposed signals describe its own package, and only one reports itself
+  releasable
 
 #### Scenario: Commit hash for the manifest
 
@@ -123,33 +137,16 @@ task configuration under the configuration cache.
 - **THEN** the jar manifest records the commit the build was produced from, while the artifact
   coordinate remains free of the hash
 
+#### Scenario: Commit hash is the same for every project
+
+- **WHEN** several projects read the exposed commit hash
+- **THEN** they all receive the commit the build was produced from, regardless of package
+
 #### Scenario: Signals are usable from a task
 
 - **WHEN** a task input is wired to an exposed signal and the build runs with the configuration cache
   enabled
 - **THEN** the task resolves the value without a configuration cache problem
-
-### Requirement: Configuration surface
-
-The plugin SHALL expose configuration for the initial version, the release tag prefix, the pre-major
-minor policy and the pre-major patch policy in the settings file, and SHALL apply the documented
-defaults when they are not set.
-
-#### Scenario: Defaults apply when unconfigured
-
-- **WHEN** the plugin is applied with no configuration
-- **THEN** the initial version is `1.0.0`, the tag prefix is `v`, and both pre-major policies are
-  disabled
-
-#### Scenario: Initial version is configurable
-
-- **WHEN** the initial version is configured as `0.1.0` and the project has never released
-- **THEN** the version is `0.1.0-SNAPSHOT`
-
-#### Scenario: Tag prefix is configurable
-
-- **WHEN** the tag prefix is configured as an empty string and a release `1.3.0` is recorded
-- **THEN** the tag `1.3.0` is used to locate the range start
 
 ### Requirement: The plugin never mutates the repository
 
@@ -165,3 +162,37 @@ create commits, and SHALL NOT write to any file tracked by the repository.
 
 - **WHEN** the available tasks of a build with the plugin applied are listed
 - **THEN** the plugin contributes no task that tags, releases or publishes on its own
+
+### Requirement: Projects are matched to packages by path
+
+The plugin SHALL match each project to the package that claims its directory, choosing the package
+whose path is the longest prefix of that directory. A project whose directory is claimed by no
+package SHALL be treated as not meant to be released.
+
+#### Scenario: Project matched to its package
+
+- **WHEN** a package is declared at `lib/a` and a project's directory is `lib/a`
+- **THEN** that project carries the version calculated for `lib/a`
+
+#### Scenario: Nested project matched to the nearest package
+
+- **WHEN** packages are declared at the repository root and at `lib/a`, and a project's directory is
+  `lib/a/impl`
+- **THEN** that project is matched to `lib/a` rather than to the root package
+
+#### Scenario: Unmatched project is not releasable
+
+- **WHEN** a project's directory is claimed by no package
+- **THEN** its version is `0.0.0-SNAPSHOT`, its bump type is `NONE` and it reports itself not
+  releasable
+
+#### Scenario: An unmatched project is not an error
+
+- **WHEN** a build contains internal, shared or aggregating projects that no package claims
+- **THEN** the build succeeds, because the release configuration declaring no package for them is a
+  statement that they are not released
+
+#### Scenario: Build below the repository root
+
+- **WHEN** the Gradle build root is below the git repository root
+- **THEN** projects are matched using their paths relative to the git repository root

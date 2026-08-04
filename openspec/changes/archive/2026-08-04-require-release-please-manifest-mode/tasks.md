@@ -123,5 +123,5 @@
 
 - [x] 10.1 Run the full `check`, the consuming build under isolated projects, and the agreement check
       against the released plugin.
-- [ ] 10.2 Commit the breaking change so `release-please` cuts 2.0.0, and confirm the plugin
+- [x] 10.2 Commit the breaking change so `release-please` cuts 2.0.0, and confirm the plugin
       calculates `2.0.0-SNAPSHOT` for its own working tree.
