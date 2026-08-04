@@ -50,7 +50,7 @@ jobs:
         # which the plugin would read back as the base version.
         fetch-depth: 0
     - uses: jdx/mise-action@v4
-    - uses: gradle/actions/setup-gradle@v6
+    - uses: gradle/actions/setup-gradle@v6.2.0
     - name: Compare the calculated version with release-please
       env:
         GH_TOKEN: ${{ github.token }}
@@ -81,7 +81,7 @@ jobs:
         ref: ${{ env.TAG }}
         fetch-depth: 0
     - uses: jdx/mise-action@v4
-    - uses: gradle/actions/setup-gradle@v6
+    - uses: gradle/actions/setup-gradle@v6.2.0
     # No -Pversion: the plugin versions this project, and on the release commit it resolves to the
     # bare release version on its own. An override that agreed would add nothing, and one that
     # disagreed would hide the disagreement.
