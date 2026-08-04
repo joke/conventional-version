@@ -37,11 +37,17 @@
 
 - [x] 4.1 Confirm `.github/settings.yml` still requires only `context: build`, and that no
       default-branch-only job name was added to `required_status_checks`
-- [ ] 4.2 Open the change as a pull request and confirm a check named `build` is reported on it
-- [ ] 4.3 Confirm the pull request build resolves a version that accounts for the commits under
-      review, by comparing its dogfood output against what the merge-ref build would have reported
-- [ ] 4.4 After merge, confirm exactly one workflow checks out the main commit to verify it, and that
-      `fidelity` and the verification job both run
+- [x] 4.2 Open the change as a pull request and confirm a check named `build` is reported on it —
+      PR #6, run 30945780235, the only run on the branch
+- [x] 4.3 Confirm the pull request build resolves a version that accounts for the commits under
+      review — the checkout is now `HEAD is now at 1bcb000 ci: order default-branch verification`
+      where it was `HEAD is now at 49c0a9e Merge 26a3d1a into 2157202`, so the reviewed commit is on
+      the first-parent line. The dogfood comparison the task proposed cannot discriminate here: this
+      change is `ci:`-scoped, so both refs yield `bump=NONE`. A releasable commit type will show it
+      in the number
+- [x] 4.4 After merge, confirm exactly one workflow checks out the main commit to verify it, and that
+      `fidelity` and the verification job both run — `44243bc` produced only `release`, where
+      `8423dd3` produced both `build` and `release`; `verify` started 10s after `release-please`
 
 ## 5. Confirm the release path on the next release
 
