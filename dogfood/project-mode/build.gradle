@@ -1,0 +1,7 @@
+// Applied to this project, by this project. The root project has to apply it itself too: nothing
+// reaches it otherwise, which is exactly the coverage settings mode provides and this mode does not.
+plugins {
+    id 'io.github.joke.conventional-version'
+}
+
+apply from: '../verify.gradle'

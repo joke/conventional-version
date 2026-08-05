@@ -1,2 +1,9 @@
+// Applied here too, on top of settings mode, so this build exercises a project reached at both
+// levels - the state a build passes through while moving from one to the other. The second
+// application must not fail on the extension name already being taken.
+plugins {
+    id 'io.github.joke.conventional-version'
+}
+
 // A second project, so the one-calculation-for-every-project promise is exercised for real.
 apply from: '../verify.gradle'
