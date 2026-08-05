@@ -51,8 +51,17 @@
 
 ## 5. Confirm the release path on the next release
 
-- [ ] 5.1 On the next release-cutting push, confirm the verification job starts after the tag exists
-      and resolves the bare release version rather than failing on a missing tag
-- [ ] 5.2 Confirm `fidelity` is skipped on that push and `publish` runs
-- [ ] 5.3 Confirm the plugin pin in `settings.gradle` is bumped by a separate dependabot pull request
-      after publication, not by the release commit — see design.md, Context
+- [x] 5.1 On the next release-cutting push, confirm the verification job starts after the tag exists
+      and resolves the bare release version rather than failing on a missing tag — the 2.1.0 push
+      (`7e9a3ef`, run 31028114259): `release-please` finished at 17:02:27 having created `v2.1.0` on
+      that commit, `verify` started at 17:02:31, and both `./gradlew properties` and the dogfood build
+      reported `2.1.0` — the bare release version, where 2.0.0 failed on the missing tag
+- [x] 5.2 Confirm `fidelity` is skipped on that push and `publish` runs — `fidelity` skipped on
+      `release_created`, `publish` succeeded; the partition held on the first release to exercise it
+- [x] 5.3 Confirm the plugin pin in `settings.gradle` is bumped by a separate dependabot pull request
+      after publication, not by the release commit — see design.md, Context. The release commit
+      `7e9a3ef` left the pin at `2.0.0`, and the bump landed separately as PR #9, touching only that
+      one line. Raised by hand rather than by dependabot: the `gradle` ecosystem is configured weekly,
+      so it would have arrived on its own schedule. What the design cared about is the *timing*, and
+      that holds either way. PR #9's `build` check passing is the stronger evidence: resolving
+      `2.1.0` from the portal proves publication completed end to end
