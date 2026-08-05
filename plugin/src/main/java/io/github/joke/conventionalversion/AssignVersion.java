@@ -1,44 +1,49 @@
 package io.github.joke.conventionalversion;
 
-import java.io.Serializable;
-import org.gradle.api.IsolatedAction;
 import org.gradle.api.Project;
+import org.jetbrains.annotations.VisibleForTesting;
 
 /**
- * Assigns each project the version of the package that claims it.
+ * Assigns one project the version of the package that claims it.
  *
- * <p>A named record rather than a lambda, because isolated projects constrains what this action may
- * close over and a lambda's captures are invisible: they are whatever happens to be in scope at the
- * point it is written. Here the captured state is the catalogue, so it is declared, reviewed in a
- * diff, and checked by the compiler. In particular this cannot capture the plugin instance, which a
- * lambda calling an instance method silently would.
+ * <p>The whole of what either mode does to a project, and the reason the two modes cannot drift
+ * apart: settings mode reaches projects by applying {@link ProjectVersionPlugin} to each of them, so
+ * both routes end in exactly this code.
  *
- * <p>The other isolated-projects requirement - never touch another project's model - is visible in
- * {@link #execute}: it uses the project it is handed and reaches nowhere else. Matching a project to
- * its package is a lookup in a value computed before any project was evaluated, which is what keeps
- * per-project versions compatible with isolated projects at all.
+ * <p>No longer an {@code IsolatedAction}. It is not what gets registered with {@code beforeProject}
+ * any more - {@link ApplyProjectPlugin} is - so it need not be serializable, and the constraints that
+ * came with that have moved there.
  *
- * <p>{@code IsolatedAction} extends {@link Serializable}, which is Gradle stating that requirement in
- * the type system: every component of this record must be serializable, and {@code VersionCatalogue}
- * is.
- *
- * <p>Public, and not by preference. Gradle 9.0 reconstructs a record by looking up its canonical
- * constructor as a <em>public</em> member, so a package-private record fails to deserialize with
- * {@code NoSuchMethodException} and every project configuration dies. Later versions look the
- * constructor up as declared and do not care. The floor decides, so this is public.
+ * <p>Reaching no further than the project it is handed is still visible in {@link #execute}: it uses
+ * that project and nothing else. Matching a project to its package is a lookup in a value computed
+ * before any project was evaluated, which is what keeps per-project versions compatible with isolated
+ * projects at all.
  */
-public record AssignVersion(VersionCatalogue catalogue) implements IsolatedAction<Project> {
+public record AssignVersion(VersionCatalogue catalogue) {
 
-    private static final long serialVersionUID = 1L;
+    @VisibleForTesting
+    static final String EXTENSION_NAME = "conventionalVersion";
 
-    @Override
     public void execute(final Project project) {
+        if (alreadyAssigned(project)) {
+            return;
+        }
         final var result = catalogue.forProject(project.getProjectDir().toPath());
         project.setVersion(result.version());
-        final var info = project.getExtensions().create(ConventionalVersionPlugin.EXTENSION_NAME, VersionInfo.class);
+        final var info = project.getExtensions().create(EXTENSION_NAME, VersionInfo.class);
         info.getVersion().set(result.version());
         info.getBumpType().set(result.bump());
         info.getReleasable().set(result.releasable());
         info.getSha().set(result.sha());
+    }
+
+    /**
+     * One id applies at both levels, so a build can reach the same project twice - most plausibly
+     * while moving from one level to the other. The second pass returns rather than failing on the
+     * extension name already being taken, which is an error naming neither plugin.
+     */
+    @VisibleForTesting
+    boolean alreadyAssigned(final Project project) {
+        return project.getExtensions().findByName(EXTENSION_NAME) != null;
     }
 }

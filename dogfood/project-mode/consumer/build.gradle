@@ -1,0 +1,7 @@
+// A second project applying the plugin for itself, so the one-calculation promise is exercised in
+// project mode too: two applications, one read of git.
+plugins {
+    id 'io.github.joke.conventional-version'
+}
+
+apply from: '../../verify.gradle'

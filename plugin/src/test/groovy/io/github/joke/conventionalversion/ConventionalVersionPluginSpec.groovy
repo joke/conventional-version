@@ -1,81 +1,63 @@
 package io.github.joke.conventionalversion
 
+import io.github.joke.conventionalversion.git.ConventionalVersionException
+import org.gradle.api.Project
 import org.gradle.api.initialization.Settings
-import org.gradle.api.invocation.Gradle
-import org.gradle.api.provider.Provider
-import org.gradle.api.provider.ProviderFactory
+import org.gradle.api.plugins.PluginAware
+import org.gradle.api.plugins.PluginManager
 import spock.lang.Specification
 
 class ConventionalVersionPluginSpec extends Specification {
 
-    ConventionalVersionPlugin plugin = Spy()
-    Settings settings = Mock()
-    Gradle gradle = Mock()
+    ConventionalVersionPlugin plugin = new ConventionalVersionPlugin()
+    PluginManager manager = Mock()
 
-    def catalogue = new VersionCatalogue('/root', [], VersionCatalogue.unreleasable('abc1234'))
+    def 'a settings file gets the mode that versions every project'() {
+        Settings target = Mock()
+
+        when:
+        plugin.apply(target)
+
+        then:
+        1 * target.pluginManager >> manager
+        1 * manager.apply(SettingsVersionPlugin)
+        0 * _
+    }
+
+    def 'a project gets the mode that versions that project'() {
+        Project target = Mock()
+
+        when:
+        plugin.apply(target)
+
+        then:
+        1 * target.pluginManager >> manager
+        1 * manager.apply(ProjectVersionPlugin)
+        0 * _
+    }
 
     /**
-     * Deferred to settingsEvaluated because a settings file may include projects after applying the
-     * plugin, and because the release configuration must be read once the build is fully described.
+     * Declaring the plugin over PluginAware costs Gradle's own applicability check - Gradle no longer
+     * refuses a wrong target on this plugin's behalf - so the message here is the only diagnostic
+     * left. Gradle itself is PluginAware, so an init script reaches it.
      */
-    def 'apply defers assignment until the settings file has been evaluated'() {
+    def 'any other target is named rather than silently doing nothing'() {
+        PluginAware target = Mock()
+
         when:
-        plugin.apply(settings)
+        plugin.apply(target)
 
         then:
-        1 * gradle.settingsEvaluated(_) >> { args -> args[0].execute(settings) }
-        1 * plugin.assignVersions(settings) >> {}
-        _ * settings.gradle >> gradle
-        1 * plugin._
+        def failure = thrown(ConventionalVersionException)
+        failure.message.contains(target.getClass().name)
+        failure.message.contains('settings.gradle')
+        failure.message.contains('project')
         0 * _
     }
 
-    def 'assignVersions registers one isolated action carrying the calculated catalogue'() {
-        def lifecycle = Mock(org.gradle.api.invocation.GradleLifecycle)
-
-        when:
-        plugin.assignVersions(settings)
-
-        then:
-        1 * plugin.calculate(settings) >> catalogue
-        1 * settings.gradle >> gradle
-        1 * gradle.lifecycle >> lifecycle
-        1 * lifecycle.beforeProject(new AssignVersion(catalogue))
-        1 * plugin._
-        0 * _
-    }
-
-    def 'calculate resolves the value source with the settings directory as its only parameter'() {
-        ProviderFactory providers = Mock()
-        Provider<VersionCatalogue> provider = Mock()
-        VersionValueSource.Parameters parameters = Mock()
-        def directoryProperty = Mock(org.gradle.api.file.DirectoryProperty)
-        def settingsDir = new File('/root')
-
-        when:
-        def resolved = plugin.calculate(settings)
-
-        then:
-        1 * settings.providers >> providers
-        1 * providers.of(VersionValueSource, _) >> { args ->
-            args[1].execute(Mock(org.gradle.api.provider.ValueSourceSpec) {
-                1 * getParameters() >> parameters
-            })
-            provider
-        }
-        1 * parameters.projectDirectory >> directoryProperty
-        1 * settings.settingsDir >> settingsDir
-        1 * directoryProperty.set(settingsDir)
-        1 * provider.get() >> catalogue
-        1 * plugin._
-        0 * _
-
+    def 'the dispatch is decided by the target type alone'() {
         expect:
-        resolved.is(catalogue)
-    }
-
-    def 'the extension name is the one build logic reads'() {
-        expect:
-        ConventionalVersionPlugin.EXTENSION_NAME == 'conventionalVersion'
+        plugin.pluginFor(Mock(Settings)) == SettingsVersionPlugin
+        plugin.pluginFor(Mock(Project)) == ProjectVersionPlugin
     }
 }

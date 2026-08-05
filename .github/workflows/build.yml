@@ -44,6 +44,21 @@ jobs:
     # only build here that can enable isolated projects, because it applies no pitest.
     - name: Dogfood the plugin from source
       run: ./gradlew -p dogfood verifyDogfood -Dorg.gradle.unsafe.isolated-projects=true
+    # The same plugin applied the other way: a settings file that deliberately does not apply it, and
+    # projects that apply it to themselves. Both modes must produce the same number at the same
+    # commit, which is the claim one id applicable at two levels makes.
+    - name: Dogfood project-level application
+      run: ./gradlew -p dogfood/project-mode verifyDogfood -Dorg.gradle.unsafe.isolated-projects=true
+    - name: The two application levels agree
+      run: |
+        settings="$(./gradlew -q -p dogfood properties | sed -n 's/^version: //p')"
+        project="$(./gradlew -q -p dogfood/project-mode properties | sed -n 's/^version: //p')"
+        echo "settings mode: $settings"
+        echo "project mode:  $project"
+        if [ "$settings" != "$project" ]; then
+          echo "::error::Project mode calculated $project where settings mode says $settings"
+          exit 1
+        fi
     - name: The plugin from source agrees with the released one
       run: |
         released="$(./gradlew -q properties | sed -n 's/^version: //p')"

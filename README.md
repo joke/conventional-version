@@ -40,6 +40,46 @@ resolves from `gradlePluginPortal()`, which is already a default.
 There is no configuration block. Everything that changes a number is read from release-please's own
 files, so the two cannot disagree.
 
+### Or in a project
+
+The same id applies to a project, so it can live in a convention plugin — which a settings plugin
+cannot, since `buildSrc` is not on the settings classpath:
+
+```groovy
+// build.gradle, or your own convention plugin
+plugins {
+    id 'io.github.joke.conventional-version'
+}
+```
+
+The plugin dispatches on what it was applied to. The version, the bump type, releasability and the
+commit hash are identical either way: settings mode is project mode applied to every project, not a
+second calculation. Git is read once per build in both.
+
+**What differs is coverage.** Applied to a project, it versions *that project* and no other:
+
+| | settings file | project |
+|---|---|---|
+| projects that apply it | every project, automatically | only those that apply it |
+| a project with no `build.gradle` | versioned | not versioned |
+| a project included later | versioned | not versioned unless it applies it too |
+| lives in a convention plugin | no — settings plugins cannot | yes |
+
+A project the plugin never reaches keeps Gradle's default version, `unspecified`, which publishes a
+broken coordinate rather than failing. If you want every project versioned without having to
+remember, use the settings file. If your shared configuration lives in a project convention plugin,
+apply it there and accept that opting a project in is now a thing you do.
+
+Applying it at both levels is harmless — a project already versioned is left alone — so moving from
+one to the other does not need a flag day.
+
+If your conventions are themselves a published **settings** plugin, it can apply this one directly and
+your builds keep their coverage with nothing in any settings file but your own id:
+
+```java
+settings.getPluginManager().apply("io.github.joke.conventional-version");
+```
+
 ## Requirements
 
 - **release-please in manifest mode.** Both `release-please-config.json` and

@@ -1,0 +1,14 @@
+// Project mode, which the sibling dogfood build cannot exercise: there the plugin is applied in the
+// settings file, so every project is versioned before any build file runs. Here the settings file
+// deliberately does not apply it - each project applies it to itself, the way a build whose shared
+// configuration lives in a project convention plugin would.
+//
+// A nested build rather than another project, because the two modes differ in what the *settings*
+// file does, and one settings file cannot both apply the plugin and not apply it.
+pluginManagement {
+    includeBuild '../..'
+}
+
+rootProject.name = 'project-mode'
+
+include 'consumer'

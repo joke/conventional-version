@@ -45,9 +45,10 @@ class AssignVersionSpec extends Specification {
         new AssignVersion(catalogue()).execute(project)
 
         then:
+        2 * project.extensions >> extensions
+        1 * extensions.findByName('conventionalVersion') >> null
         1 * project.projectDir >> root
         1 * project.setVersion('1.4.0-SNAPSHOT')
-        1 * project.extensions >> extensions
         1 * extensions.create('conventionalVersion', VersionInfo) >> info
         1 * info.version >> version
         1 * version.set('1.4.0-SNAPSHOT')
@@ -69,9 +70,10 @@ class AssignVersionSpec extends Specification {
         new AssignVersion(onlyLibA).execute(project)
 
         then:
+        2 * project.extensions >> extensions
+        1 * extensions.findByName('conventionalVersion') >> null
         1 * project.projectDir >> internal
         1 * project.setVersion('0.0.0-SNAPSHOT')
-        1 * project.extensions >> extensions
         1 * extensions.create('conventionalVersion', VersionInfo) >> info
         1 * info.version >> version
         1 * version.set('0.0.0-SNAPSHOT')
@@ -84,7 +86,26 @@ class AssignVersionSpec extends Specification {
         0 * _
     }
 
-    /** What the action closes over is a component list, so it can simply be read back. */
+    /**
+     * One id applies at both levels, so a build moving from one to the other can reach the same
+     * project twice. The second pass must not fail on the extension name already being taken.
+     */
+    def 'leaves a project that is already versioned alone, so applying at both levels is harmless'() {
+        when:
+        new AssignVersion(catalogue()).execute(project)
+
+        then:
+        1 * project.extensions >> extensions
+        1 * extensions.findByName('conventionalVersion') >> info
+        0 * _
+    }
+
+    def 'the extension name is the one build logic reads'() {
+        expect:
+        AssignVersion.EXTENSION_NAME == 'conventionalVersion'
+    }
+
+    /** What the assignment closes over is a component list, so it can simply be read back. */
     def 'captures the catalogue and nothing else'() {
         def value = catalogue()
 
