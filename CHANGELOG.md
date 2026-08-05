@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.1.0](https://github.com/joke/conventional-version/compare/v2.0.0...v2.1.0) (2026-08-05)
+
+
+### Features
+
+* apply the plugin at project level as well as in settings ([38e62d5](https://github.com/joke/conventional-version/commit/38e62d58d07060603886fbda4132e72f9fb26d93))
+
 ## [2.0.0](https://github.com/joke/conventional-version/compare/v1.0.0...v2.0.0) (2026-08-04)
 
 
