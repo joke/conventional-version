@@ -1,5 +1,10 @@
 package io.github.joke.conventionalversion.calc;
 
+import static io.github.joke.conventionalversion.calc.Bump.MAJOR;
+import static io.github.joke.conventionalversion.calc.Bump.MINOR;
+import static io.github.joke.conventionalversion.calc.Bump.NONE;
+import static io.github.joke.conventionalversion.calc.Bump.PATCH;
+
 import java.util.List;
 import java.util.Optional;
 import org.jetbrains.annotations.VisibleForTesting;
@@ -34,7 +39,7 @@ public class VersionCalculator {
      * and not a {@code Release-As:} override earlier in history.
      */
     @VisibleForTesting
-    protected Optional<SemanticVersion> findReleasedVersion(final RepositoryState state) {
+    Optional<SemanticVersion> findReleasedVersion(final RepositoryState state) {
         if (!state.headIsReleaseCommit()) {
             return Optional.empty();
         }
@@ -42,12 +47,12 @@ public class VersionCalculator {
     }
 
     @VisibleForTesting
-    protected VersionResult releasedResult(final SemanticVersion released, final String sha) {
-        return new VersionResult(released.toString(), Bump.NONE, false, sha);
+    VersionResult releasedResult(final SemanticVersion released, final String sha) {
+        return new VersionResult(released.toString(), NONE, false, sha);
     }
 
     @VisibleForTesting
-    protected VersionResult snapshotResult(final RepositoryState state, final VersionPolicy policy) {
+    VersionResult snapshotResult(final RepositoryState state, final VersionPolicy policy) {
         final var commits = parseAll(state.commitMessages());
         final var override = findOverride(commits);
         final var bump = reducer.reduce(commits);
@@ -57,13 +62,13 @@ public class VersionCalculator {
     }
 
     @VisibleForTesting
-    protected List<ConventionalCommit> parseAll(final List<String> messages) {
+    List<ConventionalCommit> parseAll(final List<String> messages) {
         return messages.stream().map(parser::parse).toList();
     }
 
     /** The most recent override wins, which with an oldest-first range is the last one. */
     @VisibleForTesting
-    protected Optional<SemanticVersion> findOverride(final List<ConventionalCommit> commits) {
+    Optional<SemanticVersion> findOverride(final List<ConventionalCommit> commits) {
         return commits.stream()
                 .map(ConventionalCommit::findReleaseAs)
                 .flatMap(Optional::stream)
@@ -71,7 +76,7 @@ public class VersionCalculator {
     }
 
     @VisibleForTesting
-    protected SemanticVersion nextVersion(
+    SemanticVersion nextVersion(
             final @Nullable SemanticVersion recorded,
             final VersionPolicy policy,
             final Optional<SemanticVersion> override,
@@ -86,7 +91,7 @@ public class VersionCalculator {
     }
 
     @VisibleForTesting
-    protected SemanticVersion applyBump(final Bump bump, final SemanticVersion base, final VersionPolicy policy) {
+    SemanticVersion applyBump(final Bump bump, final SemanticVersion base, final VersionPolicy policy) {
         return switch (effectiveBump(bump, base, policy)) {
             case MAJOR -> base.bumpMajor();
             case MINOR -> base.bumpMinor();
@@ -100,7 +105,7 @@ public class VersionCalculator {
     }
 
     @VisibleForTesting
-    protected Bump effectiveBump(final Bump bump, final SemanticVersion base, final VersionPolicy policy) {
+    Bump effectiveBump(final Bump bump, final SemanticVersion base, final VersionPolicy policy) {
         if (!base.isPreMajor()) {
             return bump;
         }
@@ -108,17 +113,17 @@ public class VersionCalculator {
     }
 
     @VisibleForTesting
-    protected Bump preMajorBump(final Bump bump, final VersionPolicy policy) {
+    Bump preMajorBump(final Bump bump, final VersionPolicy policy) {
         return switch (bump) {
-            case MAJOR -> downgrade(Bump.MAJOR, Bump.MINOR, policy.bumpMinorPreMajor());
-            case MINOR -> downgrade(Bump.MINOR, Bump.PATCH, policy.bumpPatchForMinorPreMajor());
+            case MAJOR -> downgrade(MAJOR, MINOR, policy.bumpMinorPreMajor());
+            case MINOR -> downgrade(MINOR, PATCH, policy.bumpPatchForMinorPreMajor());
             // No flag governs PATCH or NONE. Explicit default for the same reason as applyBump.
             default -> bump;
         };
     }
 
     @VisibleForTesting
-    protected Bump downgrade(final Bump original, final Bump downgraded, final boolean enabled) {
+    Bump downgrade(final Bump original, final Bump downgraded, final boolean enabled) {
         return enabled ? downgraded : original;
     }
 }

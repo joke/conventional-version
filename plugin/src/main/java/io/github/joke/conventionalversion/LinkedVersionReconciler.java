@@ -33,7 +33,7 @@ public class LinkedVersionReconciler {
     }
 
     @VisibleForTesting
-    protected PackageVersion raiseIfGrouped(
+    PackageVersion raiseIfGrouped(
             final PackageVersion version, final List<LinkedGroup> groups, final List<PackageVersion> all) {
         return groupOf(version, groups)
                 .map(group -> raise(version, membersOf(group, all)))
@@ -41,21 +41,21 @@ public class LinkedVersionReconciler {
     }
 
     @VisibleForTesting
-    protected Optional<LinkedGroup> groupOf(final PackageVersion version, final List<LinkedGroup> groups) {
+    Optional<LinkedGroup> groupOf(final PackageVersion version, final List<LinkedGroup> groups) {
         return groups.stream()
                 .filter(group -> group.holds(version.declared().component()))
                 .findFirst();
     }
 
     @VisibleForTesting
-    protected List<PackageVersion> membersOf(final LinkedGroup group, final List<PackageVersion> all) {
+    List<PackageVersion> membersOf(final LinkedGroup group, final List<PackageVersion> all) {
         return all.stream()
                 .filter(candidate -> group.holds(candidate.declared().component()))
                 .toList();
     }
 
     @VisibleForTesting
-    protected PackageVersion raise(final PackageVersion version, final List<PackageVersion> members) {
+    PackageVersion raise(final PackageVersion version, final List<PackageVersion> members) {
         return highestOf(members)
                 .map(highest -> new PackageVersion(
                         version.declared(), raised(version.result(), highest, anyReleasable(members))))
@@ -63,7 +63,7 @@ public class LinkedVersionReconciler {
     }
 
     @VisibleForTesting
-    protected Optional<SemanticVersion> highestOf(final List<PackageVersion> members) {
+    Optional<SemanticVersion> highestOf(final List<PackageVersion> members) {
         return members.stream()
                 .map(member -> versionOf(member.result()))
                 .flatMap(Optional::stream)
@@ -71,13 +71,13 @@ public class LinkedVersionReconciler {
     }
 
     @VisibleForTesting
-    protected boolean anyReleasable(final List<PackageVersion> members) {
+    boolean anyReleasable(final List<PackageVersion> members) {
         return members.stream().map(PackageVersion::result).anyMatch(VersionResult::releasable);
     }
 
     /** Total: a version that does not parse simply does not take part, rather than failing the build. */
     @VisibleForTesting
-    protected Optional<SemanticVersion> versionOf(final VersionResult result) {
+    Optional<SemanticVersion> versionOf(final VersionResult result) {
         return SemanticVersion.parse(result.version().replace(SNAPSHOT_SUFFIX, ""));
     }
 
@@ -86,8 +86,7 @@ public class LinkedVersionReconciler {
      * make an unreleased member released.
      */
     @VisibleForTesting
-    protected VersionResult raised(
-            final VersionResult member, final SemanticVersion highest, final boolean releasable) {
+    VersionResult raised(final VersionResult member, final SemanticVersion highest, final boolean releasable) {
         final var snapshot = member.version().endsWith(SNAPSHOT_SUFFIX);
         final var version = snapshot ? highest + SNAPSHOT_SUFFIX : highest.toString();
         return new VersionResult(version, member.bump(), releasable, member.sha());

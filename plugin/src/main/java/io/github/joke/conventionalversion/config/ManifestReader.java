@@ -1,11 +1,11 @@
 package io.github.joke.conventionalversion.config;
 
+import static java.util.function.Function.identity;
 import static java.util.stream.Collectors.toUnmodifiableMap;
 
 import io.github.joke.conventionalversion.calc.SemanticVersion;
 import io.github.joke.conventionalversion.git.ConventionalVersionException;
 import java.util.Map;
-import java.util.function.Function;
 import org.jetbrains.annotations.VisibleForTesting;
 
 /**
@@ -21,12 +21,11 @@ public class ManifestReader {
 
     /** Released versions by package path. A package absent from it has never released. */
     public Map<String, SemanticVersion> read(final JsonObject manifest) {
-        return manifest.keys().stream()
-                .collect(toUnmodifiableMap(Function.identity(), path -> versionAt(manifest, path)));
+        return manifest.keys().stream().collect(toUnmodifiableMap(identity(), path -> versionAt(manifest, path)));
     }
 
     @VisibleForTesting
-    protected SemanticVersion versionAt(final JsonObject manifest, final String path) {
+    SemanticVersion versionAt(final JsonObject manifest, final String path) {
         final var recorded = manifest.string(path).orElse("");
         return SemanticVersion.parse(recorded)
                 .orElseThrow(() -> new ConventionalVersionException(MANIFEST_FILE + " records '" + recorded

@@ -20,6 +20,7 @@ public record VersionPolicy(
      * release-please's defaults. The initial version is {@code 1.0.0} rather than {@code 0.1.0}
      * because that is what release-please actually cuts for a first release.
      */
+    @SuppressWarnings("PMD.StaticMethodsModifyStaticState")
     public static VersionPolicy defaults() {
         return new VersionPolicy(DEFAULT_INITIAL_VERSION, false, false);
     }

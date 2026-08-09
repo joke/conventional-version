@@ -1,6 +1,13 @@
 group = 'io.github.joke'
 
 repositories {
+    maven {
+        name = 'Central Portal Snapshots'
+        url = 'https://central.sonatype.com/repository/maven-snapshots/'
+        content {
+            includeGroupAndSubgroups('io.github.joke')
+        }
+    }
     mavenCentral()
 }
 
@@ -14,18 +21,6 @@ pluginManager.withPlugin('java') {
     pluginManager.apply 'com.diffplug.spotless'
     pluginManager.apply 'net.ltgt.errorprone'
     pluginManager.apply 'pmd'
-
-    dependencies {
-        compileOnly 'org.jspecify:jspecify:1.0.0'
-        compileOnly 'org.jetbrains:annotations:26.1.0'
-
-        testImplementation platform('org.spockframework:spock-bom:2.4-groovy-4.0')
-        testImplementation 'org.spockframework:spock-core'
-
-        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
-        testRuntimeOnly 'net.bytebuddy:byte-buddy:1.17.8'
-        testRuntimeOnly 'org.objenesis:objenesis:3.4'
-    }
 
     tasks.withType(JavaCompile).configureEach {
         options.release = 17
@@ -44,14 +39,6 @@ pluginManager.withPlugin('java') {
         maxParallelForks = Runtime.runtime.availableProcessors()
         maxHeapSize = '2g'
         jvmArgs '-XX:+HeapDumpOnOutOfMemoryError', '-XX:+CrashOnOutOfMemoryError', '-XX:+EnableDynamicAgentLoading'
-    }
-}
-
-// Mutation testing needs production classes to mutate. A module without any would fail
-// `failWhenNoMutations` before doing anything useful.
-pluginManager.withPlugin('java') {
-    if (file('src/main/java').directory) {
-        pluginManager.apply 'info.solidsoft.pitest'
     }
 }
 
@@ -99,10 +86,13 @@ pluginManager.withPlugin('net.ltgt.nullaway') {
 
 pluginManager.withPlugin('pmd') {
     pmd {
-        consoleOutput = false
-        toolVersion = '7.26.0'
+        consoleOutput = true
         rulesMinimumPriority = 5
-        ruleSets = ["$rootDir/.pmd.xml"]
+        ruleSets = ['rulesets/java/joke-strict.xml']
+    }
+    dependencies {
+        pmd 'net.sourceforge.pmd:pmd-dist:7.26.0'
+        pmd 'io.github.joke.pmd:rules:0.1.0-SNAPSHOT'
     }
 }
 

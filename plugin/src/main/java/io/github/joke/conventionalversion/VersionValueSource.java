@@ -1,5 +1,11 @@
 package io.github.joke.conventionalversion;
 
+import static io.github.joke.conventionalversion.VersionCatalogue.unreleasable;
+import static io.github.joke.conventionalversion.config.ConfigurationReader.CONFIG_FILE;
+import static io.github.joke.conventionalversion.config.ManifestReader.MANIFEST_FILE;
+import static java.nio.file.Files.isRegularFile;
+import static java.nio.file.Files.readString;
+
 import io.github.joke.conventionalversion.VersionCatalogue.PackageVersion;
 import io.github.joke.conventionalversion.calc.BumpReducer;
 import io.github.joke.conventionalversion.calc.CommitMessageParser;
@@ -19,7 +25,6 @@ import io.github.joke.conventionalversion.git.RepositoryStateReader.PackageState
 import java.io.File;
 import java.io.IOException;
 import java.io.UncheckedIOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
@@ -57,14 +62,13 @@ public abstract class VersionValueSource implements ValueSource<VersionCatalogue
     }
 
     @VisibleForTesting
-    protected VersionCatalogue catalogue(
-            final String root, final List<LinkedGroup> groups, final List<PackageState> states) {
+    VersionCatalogue catalogue(final String root, final List<LinkedGroup> groups, final List<PackageState> states) {
         final var reconciled = reconciler().reconcile(groups, calculateAll(states));
         return new VersionCatalogue(root, reconciled, unmatched(states));
     }
 
     @VisibleForTesting
-    protected List<PackageVersion> calculateAll(final List<PackageState> states) {
+    List<PackageVersion> calculateAll(final List<PackageState> states) {
         final var calculator = calculator();
         return states.stream()
                 .map(paired -> new PackageVersion(
@@ -75,94 +79,92 @@ public abstract class VersionValueSource implements ValueSource<VersionCatalogue
 
     /** Every state carries the same head sha, so any of them names the commit this build came from. */
     @VisibleForTesting
-    protected VersionResult unmatched(final List<PackageState> states) {
-        return VersionCatalogue.unreleasable(states.stream()
+    VersionResult unmatched(final List<PackageState> states) {
+        return unreleasable(states.stream()
                 .map(paired -> paired.state().headSha())
                 .findFirst()
                 .orElse(""));
     }
 
     @VisibleForTesting
-    protected ReleaseConfiguration readConfiguration(final String root) {
-        return configurationReader()
-                .read(parser().parse(readFile(root, ConfigurationReader.CONFIG_FILE), ConfigurationReader.CONFIG_FILE));
+    ReleaseConfiguration readConfiguration(final String root) {
+        return configurationReader().read(parser().parse(readFile(root, CONFIG_FILE), CONFIG_FILE));
     }
 
     @VisibleForTesting
-    protected Map<String, SemanticVersion> readManifest(final String root) {
-        return manifestReader()
-                .read(parser().parse(readFile(root, ManifestReader.MANIFEST_FILE), ManifestReader.MANIFEST_FILE));
+    Map<String, SemanticVersion> readManifest(final String root) {
+        return manifestReader().read(parser().parse(readFile(root, MANIFEST_FILE), MANIFEST_FILE));
     }
 
     /** Manifest mode is required, so an absent file is a failure naming both rather than a fallback. */
     @VisibleForTesting
-    protected String readFile(final String root, final String name) {
+    String readFile(final String root, final String name) {
         final var file = Path.of(root).resolve(name);
-        if (!Files.isRegularFile(file)) {
+        if (!isRegularFile(file)) {
             throw new ConventionalVersionException("No " + name + " at " + root
                     + ". conventional-version requires release-please to run in manifest mode, which means both "
-                    + ConfigurationReader.CONFIG_FILE + " and " + ManifestReader.MANIFEST_FILE
+                    + CONFIG_FILE + " and " + MANIFEST_FILE
                     + " at the root of the repository.");
         }
         return contentOf(file);
     }
 
     @VisibleForTesting
-    protected String contentOf(final Path file) {
+    String contentOf(final Path file) {
         try {
-            return Files.readString(file);
+            return readString(file);
         } catch (final IOException e) {
             throw new UncheckedIOException(e);
         }
     }
 
     @VisibleForTesting
-    protected VersionCalculator calculator() {
+    VersionCalculator calculator() {
         return new VersionCalculator(messageParser(), reducer());
     }
 
     @VisibleForTesting
-    protected CommitMessageParser messageParser() {
+    CommitMessageParser messageParser() {
         return new CommitMessageParser();
     }
 
     @VisibleForTesting
-    protected BumpReducer reducer() {
+    BumpReducer reducer() {
         return new BumpReducer();
     }
 
     @VisibleForTesting
-    protected LinkedVersionReconciler reconciler() {
+    LinkedVersionReconciler reconciler() {
         return new LinkedVersionReconciler();
     }
 
     @VisibleForTesting
-    protected JsonParser parser() {
+    JsonParser parser() {
         return new JsonParser();
     }
 
     @VisibleForTesting
-    protected ConfigurationReader configurationReader() {
+    ConfigurationReader configurationReader() {
         return new ConfigurationReader();
     }
 
     @VisibleForTesting
-    protected ManifestReader manifestReader() {
+    ManifestReader manifestReader() {
         return new ManifestReader();
     }
 
     @VisibleForTesting
-    protected RepositoryStateReader reader(final File directory) {
+    RepositoryStateReader reader(final File directory) {
         return new RepositoryStateReader(repository(directory));
     }
 
     @VisibleForTesting
-    protected GitRepository repository(final File directory) {
+    GitRepository repository(final File directory) {
         return new GitRepository(runner(directory));
     }
 
     @VisibleForTesting
-    protected GitCommandRunner runner(final File directory) {
+    GitCommandRunner runner(final File directory) {
         return new GitCommandRunner(directory);
     }
 }

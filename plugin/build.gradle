@@ -2,9 +2,26 @@ plugins {
     id 'java-gradle-plugin'
     id 'groovy'
     id 'conventions'
+    id 'info.solidsoft.pitest'
 }
 
 description = 'Calculates Gradle project versions from conventional commits, aligned with release-please'
+
+dependencies {
+    annotationProcessor platform(project(':dependencies'))
+    annotationProcessor 'io.github.joke.jspecify:processor'
+    annotationProcessor 'org.projectlombok:lombok'
+
+    compileOnly platform(project(':dependencies'))
+    compileOnly 'org.jetbrains:annotations'
+    compileOnly 'org.jspecify:jspecify'
+    compileOnly 'org.projectlombok:lombok'
+
+    testImplementation platform(project(':dependencies'))
+    testImplementation 'org.spockframework:spock-core'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testRuntimeOnly 'org.mockito:mockito-core'
+}
 
 gradlePlugin {
     website = 'https://github.com/joke/conventional-version'

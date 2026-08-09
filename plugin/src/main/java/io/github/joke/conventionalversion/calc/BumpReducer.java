@@ -1,5 +1,9 @@
 package io.github.joke.conventionalversion.calc;
 
+import static io.github.joke.conventionalversion.calc.Bump.MAJOR;
+import static io.github.joke.conventionalversion.calc.Bump.MINOR;
+import static io.github.joke.conventionalversion.calc.Bump.NONE;
+import static io.github.joke.conventionalversion.calc.Bump.PATCH;
 import static java.util.Comparator.naturalOrder;
 
 import java.util.List;
@@ -23,27 +27,27 @@ public class BumpReducer {
     private static final Set<String> PATCH_TYPES = Set.of("fix", "perf", "revert", "deps");
 
     public Bump reduce(final List<ConventionalCommit> commits) {
-        return commits.stream().map(this::impliedBump).max(naturalOrder()).orElse(Bump.NONE);
+        return commits.stream().map(this::impliedBump).max(naturalOrder()).orElse(NONE);
     }
 
     @VisibleForTesting
-    protected Bump impliedBump(final ConventionalCommit commit) {
+    Bump impliedBump(final ConventionalCommit commit) {
         return commit.findType()
                 .map(type -> bumpForType(type, commit.breaking()))
-                .orElse(Bump.NONE);
+                .orElse(NONE);
     }
 
     @VisibleForTesting
-    protected Bump bumpForType(final String type, final boolean breaking) {
+    Bump bumpForType(final String type, final boolean breaking) {
         if (breaking) {
-            return Bump.MAJOR;
+            return MAJOR;
         }
         if (FEATURE_TYPE.equals(type)) {
-            return Bump.MINOR;
+            return MINOR;
         }
         if (PATCH_TYPES.contains(type)) {
-            return Bump.PATCH;
+            return PATCH;
         }
-        return Bump.NONE;
+        return NONE;
     }
 }

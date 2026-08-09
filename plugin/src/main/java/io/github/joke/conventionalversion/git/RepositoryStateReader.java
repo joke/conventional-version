@@ -47,7 +47,7 @@ public class RepositoryStateReader {
     public record PackageState(ReleasePackage declared, RepositoryState state) {}
 
     @VisibleForTesting
-    protected RepositoryState stateOf(
+    RepositoryState stateOf(
             final ReleasePackage declared,
             final @Nullable SemanticVersion recorded,
             final List<Commit> history,
@@ -62,7 +62,7 @@ public class RepositoryStateReader {
 
     /** The commit a package's recorded release was cut at, found by the tag release-please would create. */
     @VisibleForTesting
-    protected String baseShaOf(final ReleasePackage declared, final SemanticVersion recorded) {
+    String baseShaOf(final ReleasePackage declared, final SemanticVersion recorded) {
         final var tag = declared.tag(recorded);
         return repository
                 .findTaggedCommit(tag)
@@ -73,7 +73,7 @@ public class RepositoryStateReader {
 
     /** The history after a package's base commit. A base that is not on the first-parent line yields nothing. */
     @VisibleForTesting
-    protected List<Commit> since(final String baseSha, final List<Commit> history) {
+    List<Commit> since(final String baseSha, final List<Commit> history) {
         final var shas = history.stream().map(Commit::sha).toList();
         final var base = shas.indexOf(baseSha);
         return base < 0 ? List.of() : history.subList(base + 1, history.size());
@@ -81,7 +81,7 @@ public class RepositoryStateReader {
 
     /** Only the commits that touched a path this package claims contribute to its bump. */
     @VisibleForTesting
-    protected List<String> messagesOf(final ReleasePackage declared, final List<Commit> commits) {
+    List<String> messagesOf(final ReleasePackage declared, final List<Commit> commits) {
         return commits.stream()
                 .filter(commit -> touches(declared, commit))
                 .map(Commit::message)
@@ -89,7 +89,7 @@ public class RepositoryStateReader {
     }
 
     @VisibleForTesting
-    protected boolean touches(final ReleasePackage declared, final Commit commit) {
+    boolean touches(final ReleasePackage declared, final Commit commit) {
         return commit.paths().stream().anyMatch(declared::claims);
     }
 

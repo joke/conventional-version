@@ -1,7 +1,9 @@
 package io.github.joke.conventionalversion.git;
 
+import static java.util.Arrays.stream;
+
 import io.github.joke.conventionalversion.calc.Commit;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import org.jetbrains.annotations.VisibleForTesting;
@@ -57,7 +59,7 @@ public class GitRepository {
     }
 
     @VisibleForTesting
-    protected boolean isInsideWorkTree() {
+    boolean isInsideWorkTree() {
         return runner.tryRun(List.of(REV_PARSE, "--is-inside-work-tree"))
                 .map(String::strip)
                 .filter("true"::equals)
@@ -65,7 +67,7 @@ public class GitRepository {
     }
 
     @VisibleForTesting
-    protected boolean isShallow() {
+    boolean isShallow() {
         return runner.tryRun(List.of(REV_PARSE, "--is-shallow-repository"))
                 .map(String::strip)
                 .filter("true"::equals)
@@ -100,33 +102,33 @@ public class GitRepository {
     }
 
     @VisibleForTesting
-    protected List<String> withRange(final String range) {
-        final var arguments = new java.util.ArrayList<>(LOG_WITH_PATHS);
+    List<String> withRange(final String range) {
+        final var arguments = new ArrayList<>(LOG_WITH_PATHS);
         arguments.add(range);
         return List.copyOf(arguments);
     }
 
     @VisibleForTesting
-    protected List<Commit> logCommits(final List<String> arguments) {
+    List<Commit> logCommits(final List<String> arguments) {
         return parseCommits(runner.run(arguments));
     }
 
     @VisibleForTesting
-    protected List<Commit> parseCommits(final String output) {
-        return Arrays.stream(output.split(RECORD_SEPARATOR))
+    List<Commit> parseCommits(final String output) {
+        return stream(output.split(RECORD_SEPARATOR))
                 .filter(entry -> !entry.isBlank())
                 .map(this::parseCommit)
                 .toList();
     }
 
     @VisibleForTesting
-    protected Commit parseCommit(final String entry) {
+    Commit parseCommit(final String entry) {
         final var fields = entry.split(FIELD_SEPARATOR, 3);
         return new Commit(fields[0].strip(), fields[1].strip(), fields.length < 3 ? List.of() : parsePaths(fields[2]));
     }
 
     @VisibleForTesting
-    protected List<String> parsePaths(final String text) {
+    List<String> parsePaths(final String text) {
         return text.lines().map(String::strip).filter(path -> !path.isEmpty()).toList();
     }
 }

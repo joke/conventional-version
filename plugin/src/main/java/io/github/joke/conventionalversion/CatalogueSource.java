@@ -25,7 +25,7 @@ public class CatalogueSource {
     }
 
     @VisibleForTesting
-    protected Provider<VersionCatalogueService> service(final Project project) {
+    Provider<VersionCatalogueService> service(final Project project) {
         return project.getGradle()
                 .getSharedServices()
                 .registerIfAbsent(SERVICE_NAME, VersionCatalogueService.class, spec -> spec.getParameters()
@@ -39,7 +39,7 @@ public class CatalogueSource {
      * directory needs no access to another project's model.
      */
     @VisibleForTesting
-    protected Provider<VersionCatalogue> calculate(final Project project) {
+    Provider<VersionCatalogue> calculate(final Project project) {
         return project.getProviders().of(VersionValueSource.class, spec -> spec.getParameters()
                 .getProjectDirectory()
                 .set(project.getProjectDir()));

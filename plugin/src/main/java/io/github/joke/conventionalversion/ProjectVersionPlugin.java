@@ -19,12 +19,12 @@ public class ProjectVersionPlugin implements Plugin<Project> {
     }
 
     @VisibleForTesting
-    protected AssignVersion assignment(final Project project) {
+    AssignVersion assignment(final Project project) {
         return new AssignVersion(source().catalogue(project));
     }
 
     @VisibleForTesting
-    protected CatalogueSource source() {
+    CatalogueSource source() {
         return new CatalogueSource();
     }
 }

@@ -1,6 +1,7 @@
 package io.github.joke.conventionalversion.config;
 
 import java.io.Serializable;
+import org.jetbrains.annotations.VisibleForTesting;
 
 /**
  * How {@code release-please} renders a release tag.
@@ -19,6 +20,7 @@ public record TagFormat(boolean includeComponent, String separator, boolean incl
     private static final String DEFAULT_SEPARATOR = "-";
 
     /** release-please's defaults: component included, separated by {@code -}, version prefixed by {@code v}. */
+    @SuppressWarnings("PMD.StaticMethodsModifyStaticState")
     public static TagFormat defaults() {
         return new TagFormat(true, DEFAULT_SEPARATOR, true);
     }
@@ -28,11 +30,13 @@ public record TagFormat(boolean includeComponent, String separator, boolean incl
     }
 
     /** Empty when the component is excluded or absent, taking the separator with it. */
-    private String componentPart(final String component) {
+    @VisibleForTesting
+    String componentPart(final String component) {
         return includeComponent && !component.isEmpty() ? component + separator : "";
     }
 
-    private String versionPart(final String version) {
+    @VisibleForTesting
+    String versionPart(final String version) {
         return includeV ? "v" + version : version;
     }
 }

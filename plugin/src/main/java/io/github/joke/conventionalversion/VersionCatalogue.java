@@ -1,15 +1,15 @@
 package io.github.joke.conventionalversion;
 
+import static io.github.joke.conventionalversion.calc.Bump.NONE;
 import static java.util.Comparator.comparingInt;
 import static java.util.stream.Collectors.joining;
+import static java.util.stream.IntStream.range;
 
-import io.github.joke.conventionalversion.calc.Bump;
 import io.github.joke.conventionalversion.calc.VersionResult;
 import io.github.joke.conventionalversion.config.ReleasePackage;
 import java.io.Serializable;
 import java.nio.file.Path;
 import java.util.List;
-import java.util.stream.IntStream;
 import org.jetbrains.annotations.VisibleForTesting;
 
 /**
@@ -37,8 +37,9 @@ public record VersionCatalogue(String repositoryRoot, List<PackageVersion> packa
         packages = List.copyOf(packages);
     }
 
+    @SuppressWarnings("PMD.StaticMethodsModifyStaticState")
     public static VersionResult unreleasable(final String sha) {
-        return new VersionResult(UNRELEASED_VERSION, Bump.NONE, false, sha);
+        return new VersionResult(UNRELEASED_VERSION, NONE, false, sha);
     }
 
     /** The version for a project directory, by the package whose claim is deepest. */
@@ -66,7 +67,7 @@ public record VersionCatalogue(String repositoryRoot, List<PackageVersion> packa
 
     @VisibleForTesting
     String join(final Path relative) {
-        return IntStream.range(0, relative.getNameCount())
+        return range(0, relative.getNameCount())
                 .mapToObj(index -> relative.getName(index).toString())
                 .collect(joining("/"));
     }

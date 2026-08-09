@@ -1,5 +1,6 @@
 package io.github.joke.conventionalversion.config;
 
+import static java.lang.String.join;
 import static java.util.stream.Collectors.groupingBy;
 
 import io.github.joke.conventionalversion.calc.SemanticVersion;
@@ -54,7 +55,7 @@ public class ConfigurationReader {
     }
 
     @VisibleForTesting
-    protected List<ReleasePackage> readPackages(final JsonObject config) {
+    List<ReleasePackage> readPackages(final JsonObject config) {
         refuseVersionAffecting(config);
         final var declared = config.object(PACKAGES)
                 .orElseThrow(() -> new ConventionalVersionException(
@@ -67,7 +68,7 @@ public class ConfigurationReader {
     }
 
     @VisibleForTesting
-    protected ReleasePackage readPackage(final String path, final JsonObject scope, final JsonObject config) {
+    ReleasePackage readPackage(final String path, final JsonObject scope, final JsonObject config) {
         refuseVersionAffecting(scope);
         return new ReleasePackage(
                 path,
@@ -83,12 +84,12 @@ public class ConfigurationReader {
      * is never used as a component.
      */
     @VisibleForTesting
-    protected String componentOf(final JsonObject scope) {
+    String componentOf(final JsonObject scope) {
         return scope.string(COMPONENT).or(() -> scope.string(PACKAGE_NAME)).orElse("");
     }
 
     @VisibleForTesting
-    protected TagFormat tagFormatOf(final JsonObject scope, final JsonObject config) {
+    TagFormat tagFormatOf(final JsonObject scope, final JsonObject config) {
         final var defaults = TagFormat.defaults();
         return new TagFormat(
                 inherited(scope, config, INCLUDE_COMPONENT_IN_TAG).orElseGet(defaults::includeComponent),
@@ -97,7 +98,7 @@ public class ConfigurationReader {
     }
 
     @VisibleForTesting
-    protected VersionPolicy policyOf(final JsonObject scope, final JsonObject config) {
+    VersionPolicy policyOf(final JsonObject scope, final JsonObject config) {
         final var defaults = VersionPolicy.defaults();
         return new VersionPolicy(
                 inheritedText(scope, config, INITIAL_VERSION)
@@ -109,7 +110,7 @@ public class ConfigurationReader {
     }
 
     @VisibleForTesting
-    protected SemanticVersion parseInitialVersion(final String text) {
+    SemanticVersion parseInitialVersion(final String text) {
         return SemanticVersion.parse(text)
                 .orElseThrow(() -> new ConventionalVersionException(CONFIG_FILE + "/" + INITIAL_VERSION
                         + " must be a major.minor.patch version, but was '" + text + "'"));
@@ -117,26 +118,29 @@ public class ConfigurationReader {
 
     /** A package setting wins over the same setting at the top level, as release-please resolves them. */
     @VisibleForTesting
-    protected Optional<Boolean> inherited(final JsonObject scope, final JsonObject config, final String key) {
+    Optional<Boolean> inherited(final JsonObject scope, final JsonObject config, final String key) {
         return scope.bool(key).or(() -> config.bool(key));
     }
 
     @VisibleForTesting
-    protected Optional<String> inheritedText(final JsonObject scope, final JsonObject config, final String key) {
+    Optional<String> inheritedText(final JsonObject scope, final JsonObject config, final String key) {
         return scope.string(key).or(() -> config.string(key));
     }
 
     @VisibleForTesting
-    protected void refuseVersionAffecting(final JsonObject scope) {
-        VERSION_AFFECTING_OPTIONS.stream().filter(scope::has).findFirst().ifPresent(option -> {
-            throw new ConventionalVersionException(CONFIG_FILE + " sets '" + option
-                    + "', which changes the version release-please cuts. conventional-version does not"
-                    + " model it, and refuses rather than calculating a number that ignores it.");
-        });
+    void refuseVersionAffecting(final JsonObject scope) {
+        VERSION_AFFECTING_OPTIONS.stream().filter(scope::has).findFirst().ifPresent(this::refuseVersionAffectingOption);
     }
 
     @VisibleForTesting
-    protected void requireDistinctTags(final List<ReleasePackage> packages) {
+    void refuseVersionAffectingOption(final String option) {
+        throw new ConventionalVersionException(CONFIG_FILE + " sets '" + option
+                + "', which changes the version release-please cuts. conventional-version does not"
+                + " model it, and refuses rather than calculating a number that ignores it.");
+    }
+
+    @VisibleForTesting
+    void requireDistinctTags(final List<ReleasePackage> packages) {
         packages.stream().collect(groupingBy(ReleasePackage::tagPattern)).entrySet().stream()
                 .filter(shared -> shared.getValue().size() > 1)
                 .findFirst()
@@ -144,15 +148,15 @@ public class ConfigurationReader {
     }
 
     @VisibleForTesting
-    protected void refuseSharedTag(final Map.Entry<String, List<ReleasePackage>> shared) {
+    void refuseSharedTag(final Map.Entry<String, List<ReleasePackage>> shared) {
         final var paths = shared.getValue().stream().map(ReleasePackage::path).toList();
-        throw new ConventionalVersionException("The packages " + String.join(" and ", paths) + " both release as '"
+        throw new ConventionalVersionException("The packages " + join(" and ", paths) + " both release as '"
                 + shared.getKey() + "', so their releases cannot be told apart. Give each a distinct 'component'"
                 + " or 'package-name' in " + CONFIG_FILE + ".");
     }
 
     @VisibleForTesting
-    protected List<LinkedGroup> readGroups(final JsonObject config) {
+    List<LinkedGroup> readGroups(final JsonObject config) {
         return config.objects(PLUGINS, TYPE).stream()
                 .filter(this::isLinkedVersions)
                 .map(this::readGroup)
@@ -160,7 +164,7 @@ public class ConfigurationReader {
     }
 
     @VisibleForTesting
-    protected boolean isLinkedVersions(final JsonObject plugin) {
+    boolean isLinkedVersions(final JsonObject plugin) {
         final var type = plugin.string(TYPE).orElse("");
         if (LINKED_VERSIONS.equals(type)) {
             return true;
@@ -175,7 +179,7 @@ public class ConfigurationReader {
     }
 
     @VisibleForTesting
-    protected LinkedGroup readGroup(final JsonObject plugin) {
+    LinkedGroup readGroup(final JsonObject plugin) {
         return new LinkedGroup(plugin.string(GROUP_NAME).orElse(LINKED_VERSIONS), plugin.strings(COMPONENTS));
     }
 }

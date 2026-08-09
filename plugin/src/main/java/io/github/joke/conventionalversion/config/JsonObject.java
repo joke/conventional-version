@@ -1,7 +1,8 @@
 package io.github.joke.conventionalversion.config;
 
+import static java.util.Collections.unmodifiableMap;
+
 import io.github.joke.conventionalversion.git.ConventionalVersionException;
-import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -41,14 +42,15 @@ public class JsonObject {
      * <p>Static and private rather than a protected test seam, because a constructor must not call an
      * overridable method. It is a pure function of its argument, and the constructor covers it.
      */
+    @SuppressWarnings("PMD.StaticMethodsModifyStaticState")
     private static Map<String, Object> withoutNulls(final Map<String, Object> raw) {
         final var present = new LinkedHashMap<String, Object>();
-        raw.forEach((key, value) -> {
-            if (value != null) {
-                present.put(key, value);
+        for (final var entry : raw.entrySet()) {
+            if (entry.getValue() != null) {
+                present.put(entry.getKey(), entry.getValue());
             }
-        });
-        return Collections.unmodifiableMap(present);
+        }
+        return unmodifiableMap(present);
     }
 
     /** The keys present, in the order the document declared them. */
@@ -96,7 +98,7 @@ public class JsonObject {
     }
 
     @VisibleForTesting
-    protected JsonObject asObject(final String key, final String nameKey, final Object element) {
+    JsonObject asObject(final String key, final String nameKey, final Object element) {
         if (element instanceof final String name) {
             return new JsonObject(Map.of(nameKey, name), path(key));
         }
@@ -104,30 +106,30 @@ public class JsonObject {
     }
 
     @VisibleForTesting
-    protected List<?> elements(final String key) {
+    List<?> elements(final String key) {
         return typed(key, List.class, "an array").map(this::present).orElseGet(List::of);
     }
 
     /** A {@code null} element is dropped, for the same reason a {@code null} value is. */
     @VisibleForTesting
-    protected List<?> present(final List<?> list) {
+    List<?> present(final List<?> list) {
         return list.stream().filter(Objects::nonNull).toList();
     }
 
     @SuppressWarnings("unchecked")
     @VisibleForTesting
-    protected JsonObject child(final String key, final Map<?, ?> map) {
+    JsonObject child(final String key, final Map<?, ?> map) {
         return new JsonObject((Map<String, Object>) map, path(key));
     }
 
     @VisibleForTesting
-    protected <T> Optional<T> typed(final String key, final Class<T> type, final String expected) {
+    <T> Optional<T> typed(final String key, final Class<T> type, final String expected) {
         return Optional.ofNullable(values.get(key)).map(value -> requireType(key, value, type, expected));
     }
 
     @SuppressWarnings("unchecked")
     @VisibleForTesting
-    protected <T> T requireType(final String key, final Object value, final Class<T> type, final String expected) {
+    <T> T requireType(final String key, final Object value, final Class<T> type, final String expected) {
         if (!type.isInstance(value)) {
             throw new ConventionalVersionException(path(key) + " must be " + expected + ", but was " + describe(value));
         }
@@ -135,7 +137,7 @@ public class JsonObject {
     }
 
     @VisibleForTesting
-    protected String describe(final Object value) {
+    String describe(final Object value) {
         if (value instanceof Map) {
             return "an object";
         }
@@ -146,7 +148,7 @@ public class JsonObject {
     }
 
     @VisibleForTesting
-    protected String path(final String key) {
+    String path(final String key) {
         return source + "/" + key;
     }
 }

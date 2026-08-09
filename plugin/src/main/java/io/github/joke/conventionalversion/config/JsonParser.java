@@ -23,7 +23,7 @@ public class JsonParser {
     }
 
     @VisibleForTesting
-    protected Object slurp(final String text, final String source) {
+    Object slurp(final String text, final String source) {
         try {
             return newSlurper().parseText(text);
         } catch (final JsonException | IllegalArgumentException e) {
@@ -32,13 +32,13 @@ public class JsonParser {
     }
 
     @VisibleForTesting
-    protected JsonSlurper newSlurper() {
+    JsonSlurper newSlurper() {
         return new JsonSlurper();
     }
 
     @SuppressWarnings("unchecked")
     @VisibleForTesting
-    protected Map<String, Object> root(final Object parsed, final String source) {
+    Map<String, Object> root(final Object parsed, final String source) {
         if (parsed instanceof final Map<?, ?> map) {
             return (Map<String, Object>) map;
         }

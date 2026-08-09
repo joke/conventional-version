@@ -1,6 +1,8 @@
 package io.github.joke.conventionalversion.calc;
 
+import static java.lang.Integer.compare;
 import static java.lang.Integer.parseInt;
+import static java.util.regex.Pattern.compile;
 
 import java.io.Serializable;
 import java.util.Optional;
@@ -9,7 +11,7 @@ import java.util.regex.Pattern;
 /** A {@code major.minor.patch} version, without pre-release or build metadata. */
 public record SemanticVersion(int major, int minor, int patch) implements Comparable<SemanticVersion>, Serializable {
 
-    private static final Pattern PATTERN = Pattern.compile("(\\d++)\\.(\\d++)\\.(\\d++)");
+    private static final Pattern PATTERN = compile("(\\d++)\\.(\\d++)\\.(\\d++)");
 
     public SemanticVersion {
         requireNonNegative(major, "major");
@@ -18,6 +20,7 @@ public record SemanticVersion(int major, int minor, int patch) implements Compar
     }
 
     /** Parses {@code 1.2.3}, returning empty when the text is not exactly three numeric parts. */
+    @SuppressWarnings("PMD.StaticMethodsModifyStaticState")
     public static Optional<SemanticVersion> parse(final String text) {
         final var matcher = PATTERN.matcher(text.strip());
         if (!matcher.matches()) {
@@ -27,6 +30,7 @@ public record SemanticVersion(int major, int minor, int patch) implements Compar
                 parseInt(matcher.group(1)), parseInt(matcher.group(2)), parseInt(matcher.group(3))));
     }
 
+    @SuppressWarnings("PMD.StaticMethodsModifyStaticState")
     private static void requireNonNegative(final int value, final String name) {
         if (value < 0) {
             throw new IllegalArgumentException(name + " must not be negative, but was " + value);
@@ -55,15 +59,15 @@ public record SemanticVersion(int major, int minor, int patch) implements Compar
 
     @Override
     public int compareTo(final SemanticVersion other) {
-        final var byMajor = Integer.compare(major, other.major);
+        final var byMajor = compare(major, other.major);
         if (byMajor != 0) {
             return byMajor;
         }
-        final var byMinor = Integer.compare(minor, other.minor);
+        final var byMinor = compare(minor, other.minor);
         if (byMinor != 0) {
             return byMinor;
         }
-        return Integer.compare(patch, other.patch);
+        return compare(patch, other.patch);
     }
 
     @Override

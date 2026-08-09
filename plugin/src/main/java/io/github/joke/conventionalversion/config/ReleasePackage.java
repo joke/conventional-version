@@ -4,6 +4,7 @@ import io.github.joke.conventionalversion.calc.SemanticVersion;
 import io.github.joke.conventionalversion.calc.VersionPolicy;
 import java.io.Serializable;
 import java.util.List;
+import org.jetbrains.annotations.VisibleForTesting;
 
 /**
  * One releasable unit, as {@code release-please} declares it.
@@ -51,11 +52,13 @@ public record ReleasePackage(
     }
 
     /** The root package claims by an empty prefix, which every path starts with. */
-    private String prefix() {
+    @VisibleForTesting
+    String prefix() {
         return ROOT.equals(path) ? "" : path;
     }
 
-    private boolean within(final String base, final String candidate) {
+    @VisibleForTesting
+    boolean within(final String base, final String candidate) {
         return base.isEmpty() || candidate.equals(base) || candidate.startsWith(base + "/");
     }
 }

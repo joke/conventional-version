@@ -1,5 +1,9 @@
 package io.github.joke.conventionalversion.calc;
 
+import static java.util.regex.Pattern.CASE_INSENSITIVE;
+import static java.util.regex.Pattern.MULTILINE;
+import static java.util.regex.Pattern.compile;
+
 import java.util.Optional;
 import java.util.regex.Pattern;
 import org.jetbrains.annotations.VisibleForTesting;
@@ -14,14 +18,14 @@ import org.jspecify.annotations.Nullable;
 public class CommitMessageParser {
 
     private static final Pattern HEADER =
-            Pattern.compile("(?<type>[a-zA-Z][\\w-]*+)" + "(?:\\((?<scope>[^()]++)\\))?" + "(?<breaking>!)?" + ": .++");
+            compile("(?<type>[a-zA-Z][\\w-]*+)" + "(?:\\((?<scope>[^()]++)\\))?" + "(?<breaking>!)?" + ": .++");
 
     /**
      * Both spellings the Conventional Commits specification permits. Uppercase only, as the
      * specification requires, and anchored to a line start so a mention inside a description does not
      * count.
      */
-    private static final Pattern BREAKING_FOOTER = Pattern.compile("^BREAKING[ -]CHANGE: ", Pattern.MULTILINE);
+    private static final Pattern BREAKING_FOOTER = compile("^BREAKING[ -]CHANGE: ", MULTILINE);
 
     /**
      * Case-insensitive, matching release-please, and tolerant of a {@code v} prefix. The version is
@@ -32,8 +36,8 @@ public class CommitMessageParser {
      * the line terminator and then be unable to backtrack for {@code $}, so a footer with any line
      * after it - a {@code Signed-off-by:} trailer, a second override - would silently fail to match.
      */
-    private static final Pattern RELEASE_AS = Pattern.compile(
-            "^release-as:[ \\t]*+v?(\\d++\\.\\d++\\.\\d++)[ \\t]*+$", Pattern.MULTILINE | Pattern.CASE_INSENSITIVE);
+    private static final Pattern RELEASE_AS =
+            compile("^release-as:[ \\t]*+v?(\\d++\\.\\d++\\.\\d++)[ \\t]*+$", MULTILINE | CASE_INSENSITIVE);
 
     private static final int RELEASE_AS_VERSION_GROUP = 1;
 
@@ -51,7 +55,7 @@ public class CommitMessageParser {
     }
 
     @VisibleForTesting
-    protected String headerOf(final String message) {
+    String headerOf(final String message) {
         return message.lines().findFirst().orElse("");
     }
 
@@ -61,7 +65,7 @@ public class CommitMessageParser {
      * @param breakingMarker the {@code !} captured from the header, or {@code null} when absent
      */
     @VisibleForTesting
-    protected boolean isBreaking(final @Nullable String breakingMarker, final String message) {
+    boolean isBreaking(final @Nullable String breakingMarker, final String message) {
         return breakingMarker != null || BREAKING_FOOTER.matcher(message).find();
     }
 
@@ -69,7 +73,7 @@ public class CommitMessageParser {
      * The last footer in the message wins, matching release-please's handling of repeated overrides.
      */
     @VisibleForTesting
-    protected Optional<SemanticVersion> findReleaseAs(final String message) {
+    Optional<SemanticVersion> findReleaseAs(final String message) {
         return RELEASE_AS
                 .matcher(message)
                 .results()

@@ -7,3 +7,6 @@ timeout {
     globalTimeout java.time.Duration.ofMinutes(1)
     applyGlobalTimeoutToFixtures false
 }
+mockMaker {
+    preferredMockMaker spock.mock.MockMakers.mockito
+}

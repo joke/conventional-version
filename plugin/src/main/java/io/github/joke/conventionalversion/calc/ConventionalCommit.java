@@ -22,6 +22,7 @@ public record ConventionalCommit(
         @Nullable SemanticVersion releaseAs) {
 
     /** A message that conforms to nothing and names no version. */
+    @SuppressWarnings("PMD.StaticMethodsModifyStaticState")
     public static ConventionalCommit nonConforming() {
         return new ConventionalCommit(null, null, false, null);
     }

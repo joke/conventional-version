@@ -1,0 +1,25 @@
+plugins {
+    id 'java-platform'
+}
+
+javaPlatform {
+    allowDependencies()
+}
+
+dependencies {
+
+    api platform('org.apache.groovy:groovy-bom:4.0.32')
+    api platform('org.spockframework:spock-bom:2.4-groovy-4.0')
+    api platform('org.slf4j:slf4j-bom:2.0.18')
+    
+    constraints {
+        api 'io.github.joke.jspecify:processor:1.0.0'
+        api 'net.bytebuddy:byte-buddy:1.17.8'
+        api 'net.bytebuddy:byte-buddy-agent:1.17.8'
+        api 'org.jetbrains:annotations:26.1.0'
+        api 'org.jspecify:jspecify:1.0.0'
+        api 'org.mockito:mockito-core:5.23.0'
+        api 'org.objenesis:objenesis:3.4'
+        api 'org.projectlombok:lombok:1.18.46'
+    }
+}

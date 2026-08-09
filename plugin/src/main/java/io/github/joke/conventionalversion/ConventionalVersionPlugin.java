@@ -43,7 +43,7 @@ public class ConventionalVersionPlugin implements Plugin<PluginAware> {
      * was given, because the alternative is a plugin that appears to apply and silently does nothing.
      */
     @VisibleForTesting
-    protected Class<? extends Plugin<?>> pluginFor(final PluginAware target) {
+    Class<? extends Plugin<?>> pluginFor(final PluginAware target) {
         if (target instanceof Settings) {
             return SettingsVersionPlugin.class;
         }
