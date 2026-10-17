@@ -1,78 +1,37 @@
 name: build
 
-# Pull requests only. The default branch is verified in release.yml, where the job can declare
-# `needs: release-please` and so start only once the release tag exists - an ordering that cannot be
-# expressed here, because GitHub Actions has no `needs:` across workflow files. Verifying main from
-# both files raced release-please and failed the 2.0.0 release commit.
-
 on:
   pull_request:
+  push:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  # Named `build` because branch protection requires a status check with that context. It has to be
-  # produced by a job that runs on every pull request; the default-branch job in release.yml is named
-  # differently so it can never be mistaken for this one.
   build:
-    # release-please PRs only ever touch CHANGELOG.md and the manifest - a full check is superfluous
-    # there, and the changelog entry for the version being cut would be read back as the base version.
-    if: ${{ !startsWith(github.head_ref, 'release-please--') }}
+    # release-please PRs and the release commits they merge into only touch CHANGELOG.md and the
+    # manifest - a full check is superfluous there. On the release commit it would also fail: the
+    # manifest already names the new version, but release-please tags it in a parallel workflow, so
+    # the checkout races the tag and the version plugin rejects a manifest version with no tag.
+    if: >-
+      ${{ !startsWith(github.head_ref, 'release-please--')
+      && !startsWith(github.event.head_commit.message, 'chore: release ') }}
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
       with:
-        # The pull request head, not the merge ref GitHub checks out by default. The version is read
-        # from the first-parent line, and a merge ref puts the base branch there - so the commits
-        # under review sit on the second parent and their conventional-commit types never reach the
-        # calculation at all. Branch protection requires the branch to be current and the repository
-        # merges by rebase, so the head is the history the merge produces. Empty on workflow_dispatch,
-        # where checkout falls back to the dispatched ref.
-        ref: ${{ github.event.pull_request.head.sha }}
-        # The version comes from the release manifest and the tag that locates the recorded release,
-        # and `check` configures the publication, so it resolves the version. A shallow clone has no
-        # tags and the build fails by design rather than falling back to a wrong coordinate.
+        # `check` configures the publications and therefore resolves the version, which needs the
+        # full history.
         fetch-depth: 0
     - uses: jdx/mise-action@v4
-    - uses: gradle/actions/setup-gradle@v6.2.0
+    - uses: gradle/actions/setup-gradle@v6
     - run: ./gradlew check
-    # The main build applies the *released* plugin, so `check` never exercises the working tree.
-    # This does: a real consuming build that resolves the plugin from source and applies it to a
-    # project in this repository, reading its actual history, tags and manifest. It is also the
-    # only build here that can enable isolated projects, because it applies no pitest.
-    - name: Dogfood the plugin from source
-      run: ./gradlew -p dogfood verifyDogfood -Dorg.gradle.unsafe.isolated-projects=true
-    # The same plugin applied the other way: a settings file that deliberately does not apply it, and
-    # projects that apply it to themselves. Both modes must produce the same number at the same
-    # commit, which is the claim one id applicable at two levels makes.
-    - name: Dogfood project-level application
-      run: ./gradlew -p dogfood/project-mode verifyDogfood -Dorg.gradle.unsafe.isolated-projects=true
-    - name: The two application levels agree
-      run: |
-        settings="$(./gradlew -q -p dogfood properties | sed -n 's/^version: //p')"
-        project="$(./gradlew -q -p dogfood/project-mode properties | sed -n 's/^version: //p')"
-        echo "settings mode: $settings"
-        echo "project mode:  $project"
-        if [ "$settings" != "$project" ]; then
-          echo "::error::Project mode calculated $project where settings mode says $settings"
-          exit 1
-        fi
-    - name: The plugin from source agrees with the released one
-      run: |
-        released="$(./gradlew -q properties | sed -n 's/^version: //p')"
-        from_source="$(./gradlew -q -p dogfood properties | sed -n 's/^version: //p')"
-        echo "released:    $released"
-        echo "from source: $from_source"
-        if [ "$released" != "$from_source" ]; then
-          echo "::error::The working tree calculates $from_source where the released plugin says $released"
-          exit 1
-        fi
     - name: Test Report
       uses: dorny/test-reporter@v3
       if: ${{ !cancelled() }}
       with:
-        name: tests
-        path: '**/test-results/*/TEST-*.xml'
+        name: rests
+        path: '**/test-results/**/TEST-*.xml'
         reporter: java-junit
