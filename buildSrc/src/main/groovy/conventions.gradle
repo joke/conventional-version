@@ -92,7 +92,7 @@ pluginManager.withPlugin('pmd') {
     }
     dependencies {
         pmd 'net.sourceforge.pmd:pmd-dist:7.26.0'
-        pmd 'io.github.joke.pmd:rules:0.1.0-SNAPSHOT'
+        pmd 'io.github.joke.pmd:rules:0.1.0'
     }
 }
 
