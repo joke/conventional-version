@@ -1,5 +1,16 @@
 # Changelog
 
+## [3.0.0](https://github.com/joke/conventional-version/compare/v2.1.0...v3.0.0) (2026-10-18)
+
+
+### ⚠ BREAKING CHANGES
+
+* protected members used as testing seams become package-private and leave the inheritable API. Nothing documents these as extension points and the plugin is applied rather than extended, so no consuming build should notice.
+
+### Build System
+
+* align the build toolchain with the shared conventions ([751826d](https://github.com/joke/conventional-version/commit/751826d1a4cea45a9ef149f87b131c3f24364a42))
+
 ## [2.1.0](https://github.com/joke/conventional-version/compare/v2.0.0...v2.1.0) (2026-08-05)
 
 
