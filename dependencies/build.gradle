@@ -20,6 +20,6 @@ dependencies {
         api 'org.jspecify:jspecify:1.0.0'
         api 'org.mockito:mockito-core:5.23.0'
         api 'org.objenesis:objenesis:3.4'
-        api 'org.projectlombok:lombok:1.18.46'
+        api 'org.projectlombok:lombok:1.18.48'
     }
 }
