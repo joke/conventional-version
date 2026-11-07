@@ -55,7 +55,7 @@ pluginManager.withPlugin('com.diffplug.spotless') {
 pluginManager.withPlugin('net.ltgt.errorprone') {
     pluginManager.apply 'net.ltgt.nullaway'
     dependencies {
-        errorprone 'com.google.errorprone:error_prone_core:2.49.0'
+        errorprone 'com.google.errorprone:error_prone_core:2.52.0'
     }
     tasks.withType(JavaCompile).configureEach {
         options.errorprone {
